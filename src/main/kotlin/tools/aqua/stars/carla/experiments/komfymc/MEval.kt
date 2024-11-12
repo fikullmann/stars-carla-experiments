@@ -119,7 +119,8 @@ class MEval {
         if (formula.ref.fixed) {
           return listOf(Leaf(if (formula.call()) SatPred(tp) else VPred(tp)))
         } else {
-          val part = formula.ref.cycleEntitiesAtTick(tp, formula.phi as (EntityType<*, *, *>) -> Boolean)
+          val part =
+              formula.ref.cycleEntitiesAtTick(tp, formula.phi as (EntityType<*, *, *>) -> Boolean)
           // val node = Node(formula.ref, part)
           return listOf(Node(formula.ref, part))
         }
@@ -127,19 +128,25 @@ class MEval {
       is MBinaryPred<*, *> -> {
         val pair = formula.ref1.fixed to formula.ref2.fixed
         when (pair) {
-          true to true -> return listOf(
-            Leaf(
-              if (formula.call()) {
-                SatPred(tp)
-              } else { VPred(tp) })
-          )
+          true to true ->
+              return listOf(
+                  Leaf(
+                      if (formula.call()) {
+                        SatPred(tp)
+                      } else {
+                        VPred(tp)
+                      }))
           true to false -> return eval(ts, tp, ref, formula.fix1())
           false to true -> return eval(ts, tp, ref, formula.fix2())
           else -> {
             val order = ref.indexOf(formula.ref1) < ref.indexOf(formula.ref2)
             val firstRef = if (order) formula.ref1 else formula.ref2
             val secondRef = if (order) formula.ref2 else formula.ref1
-            val part = firstRef.cycleBinaryEntitiesAtTick(tp, formula.phi as (EntityType<*, *, *>, EntityType<*, *, *>) -> Boolean, secondRef)
+            val part =
+                firstRef.cycleBinaryEntitiesAtTick(
+                    tp,
+                    formula.phi as (EntityType<*, *, *>, EntityType<*, *, *>) -> Boolean,
+                    secondRef)
             return listOf(Node(firstRef, part))
           }
         }

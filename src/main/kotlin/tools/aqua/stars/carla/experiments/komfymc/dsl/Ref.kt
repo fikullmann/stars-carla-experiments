@@ -85,16 +85,18 @@ open class Ref<E1 : EntityType<*, *, *>>(
         acc[RefId(e.id)] = Leaf(if (phi.invoke(e)) SatPred(tp) else VPred(tp))
         acc
       }
+
   inline fun cycleBinaryEntitiesAtTick(
       tp: TP,
       phi: (EntityType<*, *, *>, EntityType<*, *, *>) -> Boolean,
       ref2: Ref<out EntityType<*, *, *>>
   ) =
       allAtTick().fold(mutableMapOf<RefId, Pdt<Proof>>()) { acc1, e1 ->
-        val part2 = ref2.allAtTick().fold(mutableMapOf<RefId, Pdt<Proof>>()) { acc2, e2 ->
-            acc2[RefId(e2.id)] = Leaf(if (phi.invoke(e1, e2)) SatPred(tp) else VPred(tp))
-            acc2
-        }
+        val part2 =
+            ref2.allAtTick().fold(mutableMapOf<RefId, Pdt<Proof>>()) { acc2, e2 ->
+              acc2[RefId(e2.id)] = Leaf(if (phi.invoke(e1, e2)) SatPred(tp) else VPred(tp))
+              acc2
+            }
         acc1[RefId(e1.id)] = Node(ref2, part2)
         acc1
       }

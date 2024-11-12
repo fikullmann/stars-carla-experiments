@@ -17,12 +17,12 @@
 
 package tools.aqua.stars.carla.experiments.komfymc
 
+import java.util.*
 import tools.aqua.auxStructures.EmptyVariableReferences
 import tools.aqua.auxStructures.IncorrectVariableReferences
 import tools.aqua.stars.carla.experiments.komfymc.dsl.Ref
 import tools.aqua.stars.carla.experiments.komfymc.dsl.RefId
 import tools.aqua.stars.core.types.EntityType
-import java.util.*
 
 abstract class Pdt<Aux> {
   abstract fun <Result> apply1(
@@ -40,10 +40,8 @@ class Leaf<Aux>(val value: Aux) : Pdt<Aux>() {
   }
 }
 
-class Node<Aux>(
-    val variable: Ref<out EntityType<*, *, *>>,
-    val partition: Map<RefId, Pdt<Aux>>
-) : Pdt<Aux>() {
+class Node<Aux>(val variable: Ref<out EntityType<*, *, *>>, val partition: Map<RefId, Pdt<Aux>>) :
+    Pdt<Aux>() {
   override fun <Result> apply1(
       vars: MutableList<Ref<EntityType<*, *, *>>>,
       f: (Aux) -> Result
@@ -115,7 +113,7 @@ fun <P, Result> apply1(
   } else if (vars.isNotEmpty() && tree is Node<P>) {
     for (variable in vars) {
       if (tree.variable == variable) {
-        return Node(variable, tree.partition.mapValues {apply1(vars, it.value, f) })
+        return Node(variable, tree.partition.mapValues { apply1(vars, it.value, f) })
       }
     }
     throw IncorrectVariableReferences()
@@ -158,28 +156,24 @@ fun <P, Aux, Result> compareVariables(
     f: (P, Aux) -> Result
 ): Pdt<Result> {
   val variable = vars.removeFirst()
-    return if (pdt1.variable == variable) {
-        if (pdt2.variable == variable) {
-            Node(
-                variable,
-                merge2(pdt1.partition, pdt2.partition).mapValues { (_, value) ->
-                    apply2(vars, value.first, value.second, f)
-                })
-        } else {
-
-            Node(
-                variable,
-                pdt1.partition.mapValues { (_, tree1) -> apply2(vars, tree1, pdt2, f) })
-        }
+  return if (pdt1.variable == variable) {
+    if (pdt2.variable == variable) {
+      Node(
+          variable,
+          merge2(pdt1.partition, pdt2.partition).mapValues { (_, value) ->
+            apply2(vars, value.first, value.second, f)
+          })
     } else {
-        if (pdt2.variable == variable) {
-            Node(
-                variable,
-                pdt2.partition.mapValues { (_, tree2) -> apply2(vars, pdt1, tree2, f) })
-        } else {
-            apply2(vars, pdt1, pdt2, f)
-        }
+
+      Node(variable, pdt1.partition.mapValues { (_, tree1) -> apply2(vars, tree1, pdt2, f) })
     }
+  } else {
+    if (pdt2.variable == variable) {
+      Node(variable, pdt2.partition.mapValues { (_, tree2) -> apply2(vars, pdt1, tree2, f) })
+    } else {
+      apply2(vars, pdt1, pdt2, f)
+    }
+  }
 }
 
 fun <P1, P2> merge2(
@@ -188,9 +182,7 @@ fun <P1, P2> merge2(
 ): Map<RefId, Pair<Pdt<P1>, Pdt<P2>>> {
   val result = mutableMapOf<RefId, Pair<Pdt<P1>, Pdt<P2>>>()
   part1.entries.forEach { (refId1, pdt1) ->
-    part2[refId1]?.let { pdt2 ->
-        result[refId1] = pdt1 to pdt2
-    }
+    part2[refId1]?.let { pdt2 -> result[refId1] = pdt1 to pdt2 }
   }
   return result
 }
@@ -278,21 +270,15 @@ fun <P, Aux, Result> apply3(
         (false to false) to true ->
             Node(
                 variable,
-                pdt3.partition.mapValues { (refId3, tree3) ->
-                  apply3(vars, pdt1, pdt2, tree3, f)
-                })
+                pdt3.partition.mapValues { (refId3, tree3) -> apply3(vars, pdt1, pdt2, tree3, f) })
         (false to true) to false ->
             Node(
                 variable,
-                pdt2.partition.mapValues { (refId2, tree2) ->
-                  apply3(vars, pdt1, tree2, pdt3, f)
-                })
+                pdt2.partition.mapValues { (refId2, tree2) -> apply3(vars, pdt1, tree2, pdt3, f) })
         (true to false) to false ->
             Node(
                 variable,
-                pdt1.partition.mapValues { (refId1, tree1) ->
-                  apply3(vars, tree1, pdt2, pdt3, f)
-                })
+                pdt1.partition.mapValues { (refId1, tree1) -> apply3(vars, tree1, pdt2, pdt3, f) })
         else -> apply3(vars, pdt1, pdt2, pdt3, f)
       }
     }

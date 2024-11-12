@@ -180,18 +180,12 @@ class FormulaBuilder(val phi: MutableList<Formula> = mutableListOf()) {
     return MaxPrevalence(interval, fraction, phi[0])
   }
 
-  fun buildPastMinPrevalence(
-      interval: Pair<Double, Double>?,
-      fraction: Double
-  ): PastMinPrevalence {
+  fun buildPastMinPrevalence(interval: Pair<Double, Double>?, fraction: Double): PastMinPrevalence {
     assert(phi.size == 1)
     return PastMinPrevalence(interval, fraction, phi[0])
   }
 
-  fun buildPastMaxPrevalence(
-      interval: Pair<Double, Double>?,
-      fraction: Double
-  ): PastMaxPrevalence {
+  fun buildPastMaxPrevalence(interval: Pair<Double, Double>?, fraction: Double): PastMaxPrevalence {
     assert(phi.size == 1)
     return PastMaxPrevalence(interval, fraction, phi[0])
   }
@@ -261,63 +255,63 @@ class FormulaBuilder(val phi: MutableList<Formula> = mutableListOf()) {
         phi.add(it)
       }
 
-    inline fun FormulaBuilder.prev(
+  inline fun FormulaBuilder.prev(
       interval: Pair<Double, Double>? = null,
       init: FormulaBuilder.() -> Unit = {}
   ): Prev {
     return FormulaBuilder().apply(init).buildPrev(interval).also { phi.add(it) }
   }
 
-    inline fun FormulaBuilder.next(
+  inline fun FormulaBuilder.next(
       interval: Pair<Double, Double>? = null,
       init: FormulaBuilder.() -> Unit = {}
   ): Next {
     return FormulaBuilder().apply(init).buildNext(interval).also { phi.add(it) }
   }
 
-    inline fun FormulaBuilder.once(
+  inline fun FormulaBuilder.once(
       interval: Pair<Double, Double>? = null,
       init: FormulaBuilder.() -> Unit = {}
   ): Once {
     return FormulaBuilder().apply(init).buildOnce(interval).also { phi.add(it) }
   }
 
-    inline fun FormulaBuilder.historically(
+  inline fun FormulaBuilder.historically(
       interval: Pair<Double, Double>? = null,
       init: FormulaBuilder.() -> Unit = {}
   ): Historically {
     return FormulaBuilder().apply(init).buildHistorically(interval).also { phi.add(it) }
   }
 
-    inline fun eventually(
+  inline fun eventually(
       interval: Pair<Double, Double?>? = null,
       init: FormulaBuilder.() -> Unit = {}
   ): Eventually {
     return FormulaBuilder().apply(init).buildEventually(interval).also { phi.add(it) }
   }
 
-    inline fun FormulaBuilder.globally(
+  inline fun FormulaBuilder.globally(
       interval: Pair<Double, Double>? = null,
       init: FormulaBuilder.() -> Unit = {}
   ): Always {
     return FormulaBuilder().apply(init).buildAlways(interval).also { phi.add(it) }
   }
 
-    inline fun FormulaBuilder.since(
+  inline fun FormulaBuilder.since(
       interval: Pair<Double, Double>? = null,
       init: FormulaBuilder.() -> Unit = {}
   ): Since {
     return FormulaBuilder().apply(init).buildSince(interval).also { phi.add(it) }
   }
 
-    inline fun FormulaBuilder.until(
+  inline fun FormulaBuilder.until(
       interval: Pair<Double, Double>? = null,
       init: FormulaBuilder.() -> Unit = {}
   ): Until {
     return FormulaBuilder().apply(init).buildUntil(interval).also { phi.add(it) }
   }
 
-    inline fun <
+  inline fun <
       reified E1 : E,
       E : EntityType<E, T, S>,
       T : TickDataType<E, T, S>,
@@ -328,7 +322,7 @@ class FormulaBuilder(val phi: MutableList<Formula> = mutableListOf()) {
     return FormulaBuilder().apply { init(ref) }.buildForall(ref).also { phi.add(it) }
   }
 
-    inline fun <
+  inline fun <
       reified E1 : E,
       E : EntityType<E, T, S>,
       T : TickDataType<E, T, S>,
@@ -339,7 +333,7 @@ class FormulaBuilder(val phi: MutableList<Formula> = mutableListOf()) {
     return FormulaBuilder().apply { init(ref) }.buildExists(ref).also { phi.add(it) }
   }
 
-    inline fun FormulaBuilder.minPrevalence(
+  inline fun FormulaBuilder.minPrevalence(
       fraction: Double,
       interval: Pair<Double, Double>? = null,
       init: FormulaBuilder.() -> Unit = {}
@@ -347,7 +341,7 @@ class FormulaBuilder(val phi: MutableList<Formula> = mutableListOf()) {
     return FormulaBuilder().apply(init).buildMinPrevalence(interval, fraction).also { phi.add(it) }
   }
 
-    inline fun FormulaBuilder.maxPrevalence(
+  inline fun FormulaBuilder.maxPrevalence(
       fraction: Double,
       interval: Pair<Double, Double>? = null,
       init: FormulaBuilder.() -> Unit = {}
@@ -355,7 +349,7 @@ class FormulaBuilder(val phi: MutableList<Formula> = mutableListOf()) {
     return FormulaBuilder().apply(init).buildMaxPrevalence(interval, fraction).also { phi.add(it) }
   }
 
-    inline fun FormulaBuilder.pastMinPrevalence(
+  inline fun FormulaBuilder.pastMinPrevalence(
       fraction: Double,
       interval: Pair<Double, Double>? = null,
       init: FormulaBuilder.() -> Unit = {}
@@ -365,7 +359,7 @@ class FormulaBuilder(val phi: MutableList<Formula> = mutableListOf()) {
     }
   }
 
-    inline fun FormulaBuilder.pastMaxPrevalence(
+  inline fun FormulaBuilder.pastMaxPrevalence(
       fraction: Double,
       interval: Pair<Double, Double>? = null,
       init: FormulaBuilder.() -> Unit = {}
@@ -402,7 +396,7 @@ class FormulaBuilder(val phi: MutableList<Formula> = mutableListOf()) {
 
   infix fun <Type> Term<Type>.ne(other: Term<Type>): Ne<Type> = Ne(this, other).also { phi.add(it) }
 
-    fun <Type> term(init: () -> Type): Variable<Type> = Variable(init)
+  fun <Type> term(init: () -> Type): Variable<Type> = Variable(init)
 
   fun <
       E1 : E,

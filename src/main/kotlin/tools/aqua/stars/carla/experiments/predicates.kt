@@ -22,26 +22,31 @@ import kotlin.math.sign
 import tools.aqua.stars.core.evaluation.BinaryPredicate.Companion.predicate
 import tools.aqua.stars.core.evaluation.PredicateContext
 import tools.aqua.stars.core.evaluation.UnaryPredicate.Companion.predicate
+import tools.aqua.stars.data.av.*
 import tools.aqua.stars.data.av.dataclasses.*
 import tools.aqua.stars.logic.kcmftbl.*
 
 // region predicates/formulas
 
+/** The [Block] of [Vehicle] v has less than 6 vehicles in it. */
 val hasLowTrafficDensity =
     predicate(Vehicle::class) { ctx, v ->
       !(hasMidTrafficDensity.holds(ctx, v) || hasHighTrafficDensity.holds(ctx, v))
     }
 
+/** The [Block] of [Vehicle] v has between 6 and 15 vehicles in it. */
 val hasMidTrafficDensity =
     predicate(Vehicle::class) { _, v ->
       minPrevalence(v, 0.6) { v -> v.tickData.vehiclesInBlock(v.lane.road.block).size in 6..15 }
     }
 
+/** The [Block] of [Vehicle] v has more than 15 vehicles in it. */
 val hasHighTrafficDensity =
     predicate(Vehicle::class) { _, v ->
       minPrevalence(v, 0.6) { v -> v.tickData.vehiclesInBlock(v.lane.road.block).size > 15 }
     }
 
+/** [Vehicle] v changes its lange at least once. */
 val changedLane =
     predicate(Vehicle::class) { _, v ->
       eventually(v) { v0 ->
@@ -49,20 +54,24 @@ val changedLane =
       }
     }
 
+/** The [Vehicle]s v0 and v1 are on the same [Road]. */
 val onSameRoad =
     predicate(Vehicle::class to Vehicle::class) { _, v0, v1 -> v0.lane.road == v1.lane.road }
 
+/** [Vehicle] v0 is on the same road as [Vehicle] v1 but drives on the other direction. */
 val oncoming =
-    predicate(Vehicle::class to Vehicle::class) { ctx, vehicle1, vehicle2 ->
-      eventually(vehicle1, vehicle2) { v0, v1 ->
+    predicate(Vehicle::class to Vehicle::class) { ctx, v0, v1 ->
+      eventually(v0, v1) { v0, v1 ->
         onSameRoad.holds(ctx, v0, v1) && v0.lane.laneId.sign != v1.lane.laneId.sign
       }
     }
 
+/** [Vehicle] v is mostly in a junction. */
 val isInJunction =
-    predicate(Vehicle::class) { _, it -> minPrevalence(it, 0.8) { it.lane.road.isJunction } }
+    predicate(Vehicle::class) { _, v -> minPrevalence(v, 0.8) { v -> v.lane.road.isJunction } }
 
-val isInSingleLane =
+/** [Vehicle] v is mostly on a single lane. */
+val isOnSingleLane =
     predicate(Vehicle::class) { ctx, v ->
       !isInJunction.holds(ctx, v) &&
           minPrevalence(v, 0.8) {
@@ -70,48 +79,60 @@ val isInSingleLane =
           }
     }
 
-val isInMultiLane =
+/** [Vehicle] v is mostly on a multi-lane. */
+val isOnMultiLane =
     predicate(Vehicle::class) { ctx, v ->
-      !isInJunction.holds(ctx, v) && !isInSingleLane.holds(ctx, v)
+      !isInJunction.holds(ctx, v) && !isOnSingleLane.holds(ctx, v)
     }
 
-fun PredicateContext<Actor, TickData, Segment>.sunset(): Boolean =
+typealias ExperimentPredicateContext =
+    PredicateContext<Actor, TickData, Segment, TickDataUnitSeconds, TickDataDifferenceSeconds>
+
+/** The daytime was mostly [Daytime.Sunset]. */
+fun ExperimentPredicateContext.sunset(): Boolean =
     minPrevalence(this.segment.tickData.first(), 0.6) { d -> d.daytime == Daytime.Sunset }
 
-typealias ExperimentPredicateContext = PredicateContext<Actor, TickData, Segment>
-
+/** The daytime was mostly [Daytime.Noon]. */
 fun ExperimentPredicateContext.noon(): Boolean =
     minPrevalence(this.segment.tickData.first(), 0.6) { d -> d.daytime == Daytime.Noon }
 
-fun PredicateContext<Actor, TickData, Segment>.weatherClear(): Boolean =
+/** The weather was mostly [WeatherType.Clear]. */
+fun ExperimentPredicateContext.weatherClear(): Boolean =
     minPrevalence(this.segment.tickData.first(), 0.6) { d -> d.weather.type == WeatherType.Clear }
 
-fun PredicateContext<Actor, TickData, Segment>.weatherCloudy(): Boolean =
+/** The weather was mostly [WeatherType.Cloudy]. */
+fun ExperimentPredicateContext.weatherCloudy(): Boolean =
     minPrevalence(this.segment.tickData.first(), 0.6) { d -> d.weather.type == WeatherType.Cloudy }
 
-fun PredicateContext<Actor, TickData, Segment>.weatherWet(): Boolean =
+/** The weather was mostly [WeatherType.Wet]. */
+fun ExperimentPredicateContext.weatherWet(): Boolean =
     minPrevalence(this.segment.tickData.first(), 0.6) { d -> d.weather.type == WeatherType.Wet }
 
-fun PredicateContext<Actor, TickData, Segment>.weatherWetCloudy(): Boolean =
+/** The weather was mostly [WeatherType.WetCloudy]. */
+fun ExperimentPredicateContext.weatherWetCloudy(): Boolean =
     minPrevalence(this.segment.tickData.first(), 0.6) { d ->
       d.weather.type == WeatherType.WetCloudy
     }
 
-fun PredicateContext<Actor, TickData, Segment>.weatherSoftRain(): Boolean =
+/** The weather was mostly [WeatherType.SoftRainy]. */
+fun ExperimentPredicateContext.weatherSoftRain(): Boolean =
     minPrevalence(this.segment.tickData.first(), 0.6) { d ->
       d.weather.type == WeatherType.SoftRainy
     }
 
-fun PredicateContext<Actor, TickData, Segment>.weatherMidRain(): Boolean =
+/** The weather was mostly [WeatherType.MidRainy]. */
+fun ExperimentPredicateContext.weatherMidRain(): Boolean =
     minPrevalence(this.segment.tickData.first(), 0.6) { d ->
       d.weather.type == WeatherType.MidRainy
     }
 
-fun PredicateContext<Actor, TickData, Segment>.weatherHardRain(): Boolean =
+/** The weather was mostly [WeatherType.HardRainy]. */
+fun ExperimentPredicateContext.weatherHardRain(): Boolean =
     minPrevalence(this.segment.tickData.first(), 0.6) { d ->
       d.weather.type == WeatherType.HardRainy
     }
 
+/** There is a [Vehicle] between the two [Vehicle]s v0 and v1. */
 val soBetween =
     predicate(Vehicle::class to Vehicle::class) { _, v0, v1 ->
       v1.tickData.vehicles
@@ -123,6 +144,7 @@ val soBetween =
           }
     }
 
+/** [Vehicle] v0 is behind [Vehicle] v1 on the same [Lane]. */
 val behind =
     predicate(Vehicle::class to Vehicle::class) { ctx, v0, v1 ->
       ((v0.lane.uid == v1.lane.uid && v0.positionOnLane < v1.positionOnLane) ||
@@ -130,14 +152,22 @@ val behind =
           !soBetween.holds(ctx, v0, v1)
     }
 
+/** [Vehicle] v0 follows [Vehicle] v1 for at least 30 seconds. */
 val follows =
-    predicate(Vehicle::class to Vehicle::class) { ctx, ego, v1 ->
-      eventually(ego, v1) { ego, v1 ->
-        globally(ego, v1, 0.0 to 30.0) { ego, v1 -> behind.holds(ctx, ego, v1) } &&
-            eventually(ego, v1, 30.0 to 31.0) { _, _ -> true }
+    predicate(Vehicle::class to Vehicle::class) { ctx, v0, v1 ->
+      eventually(v0, v1) { v0, v1 ->
+        globally(v0, v1, TickDataDifferenceSeconds(0.0) to TickDataDifferenceSeconds(30.0)) { v0, v1
+          ->
+          behind.holds(ctx, v0, v1)
+        } &&
+            eventually(
+                v0, v1, TickDataDifferenceSeconds(30.0) to TickDataDifferenceSeconds(31.0)) { _, _
+                  ->
+                  true
+                }
       }
     }
-
+/*
 fun follows2(ctx: PredicateContext<Actor, TickData, Segment>) =
     ctx.entityIds.any { otherVehicleId ->
       predicate(Vehicle::class to Vehicle::class) { ctx, ego, v1 ->
@@ -147,28 +177,32 @@ fun follows2(ctx: PredicateContext<Actor, TickData, Segment>) =
             }
           }
           .holds(ctx, actor2 = otherVehicleId)
-    }
+    }*/
 
+/** There is a speed limit of 90mph. */
 val mphLimit90 =
     predicate(Vehicle::class) { _, v ->
       eventually(v) { v -> v.lane.speedAt(v.positionOnLane) == 90.0 }
     }
 
+/** There is a speed limit of 60mph. */
 val mphLimit60 =
     predicate(Vehicle::class) { _, v ->
       eventually(v) { v -> v.lane.speedAt(v.positionOnLane) == 60.0 }
     }
 
+/** There is a speed limit of 30mph. */
 val mphLimit30 =
-    predicate(Vehicle::class) { _, it ->
-      eventually(it) { it.lane.speedAt(it.positionOnLane) == 30.0 }
+    predicate(Vehicle::class) { _, v ->
+      eventually(v) { v -> v.lane.speedAt(v.positionOnLane) == 30.0 }
     }
 
+/** [Actor] a0 and [Actor] a1 are on the same lane. */
 val onSameLane = predicate(Actor::class to Actor::class) { _, a1, a2 -> a1.lane.uid == a2.lane.uid }
 
 /**
  * pedestrian p is on the same lane es vehicle, v and v is driving towards p with a distance of < 10
- * m
+ * meters.
  */
 val inReach =
     predicate(Pedestrian::class to Vehicle::class) { ctx, p, v ->
@@ -177,14 +211,14 @@ val inReach =
 
 /**
  * true if at any one time stamp in the future there exists a pedestrian that crosses the lane right
- * before v
+ * before v.
  */
 val pedestrianCrossed =
     predicate(Vehicle::class) { ctx, v ->
       eventually(v) { v -> v.tickData.pedestrians.any { p -> inReach.holds(ctx, p, v) } }
     }
 
-/** v0/v1 driving on the same road into the same direction */
+/** v0/v1 driving on the same road into the same direction. */
 val sameDirection =
     predicate(Vehicle::class to Vehicle::class) { ctx, v0, v1 ->
       onSameRoad.holds(ctx, v0, v1) && v0.lane.laneId.sign == v1.lane.laneId.sign
@@ -202,7 +236,7 @@ val isBehind =
       sameDirection.holds(ctx, v0, v1) && (v0.positionOnLane + 2.0) < v1.positionOnLane
     }
 
-/** v0/v1 driving at speeds over 10 mph */
+/** v0/v1 driving at speeds over 10 mph. */
 val bothOver10MPH =
     predicate(Vehicle::class to Vehicle::class) { _, v0, v1 ->
       v0.effVelocityInMPH > 10 && v1.effVelocityInMPH > 10
@@ -242,16 +276,19 @@ val overtaking =
       }
     }
 
+/** [Vehicle] v was overtaking by at least one other [Vehicle]. */
 val hasOvertaken =
     predicate(Vehicle::class) { ctx, v ->
       v.tickData.vehicles.any { v1 -> overtaking.holds(ctx, v, v1) }
     }
 
+/** [Vehicle] v0 is on a right [Lane] of [Vehicle] v1. */
 val rightOf =
     predicate(Vehicle::class to Vehicle::class) { ctx, v0, v1 ->
       besides.holds(ctx, v0, v1) && abs(v0.lane.laneId) > abs(v1.lane.laneId)
     }
 
+/** [Vehicle] v0 overtook [Vehicle] v1 on the right. */
 val rightOvertaking =
     predicate(Vehicle::class to Vehicle::class) { ctx, v0, v1 ->
       eventually(v0, v1) { v0, v1 ->
@@ -283,23 +320,28 @@ val rightOvertaking =
       }
     }
 
+/** [Vehicle] v has not overtaken another [Vehicle] on the right. */
 val noRightOvertaking =
     predicate(Vehicle::class) { ctx, v ->
       v.tickData.vehicles.all { v1 -> !rightOvertaking.holds(ctx, v, v1) }
     }
 
+/** [Vehicle] v has stopped. */
 val stopped = predicate(Vehicle::class) { _, v -> v.effVelocityInMPH < 1.8 }
 
+/** [Vehicle] v has stopped at the end of its [Road]. */
 val stopAtEnd =
     predicate(Vehicle::class) { ctx, v ->
       eventually(v) { v1 -> isAtEndOfRoad.holds(ctx, v1) && stopped.holds(ctx, v1) }
     }
 
+/** [Vehicle] v0 has passed the contact point of the crossing [Lane] of [Vehicle] v1. */
 val passedContactPoint =
     predicate(Vehicle::class to Vehicle::class) { _, v0, v1 ->
-      v0.lane.contactPointPos(v1.lane)?.let { it < v0.positionOnLane } ?: false
+      v0.lane.contactPointPos(v1.lane)?.let { it < v0.positionOnLane } == true
     }
 
+/** [Vehicle] v0 has yielded to [Vehicle] v1. */
 val hasYielded =
     predicate(Vehicle::class to Vehicle::class) { ctx, v0, v1 ->
       until(
@@ -309,11 +351,13 @@ val hasYielded =
           phi2 = { v0, v1 -> passedContactPoint.holds(ctx, v1, v0) })
     }
 
+/** [Vehicle] v always had a speed lower than the allowed speed limit. */
 val obeyedSpeedLimit =
     predicate(Vehicle::class) { _, v ->
       globally(v) { v -> (v.effVelocityInMPH) <= v.lane.speedAt(v.positionOnLane) }
     }
 
+/** [Vehicle] v has a red light on its [Lane]. */
 val hasRedLight =
     predicate(Vehicle::class) { _, v ->
       v.lane.successorLanes.any { contactLaneInfo ->
@@ -323,13 +367,13 @@ val hasRedLight =
       }
     }
 
+/** [Vehicle] v has a red light on its [Lane] and v is close to the traffic light. */
 val hasRelevantRedLight =
     predicate(Vehicle::class) { ctx, v ->
       eventually(v) { v -> hasRedLight.holds(ctx, v) && isAtEndOfRoad.holds(ctx, v) }
     }
 
-// Did not cross Stefan: G[v'](v'.hasRelevantRedLight => X[v''](v'.road == v''.road))
-// Did cross Till: F[v'](v'.hasRelevantRedLight && X[v''](v'.road != v''.road))
+/** [Vehicle] v has crossed a red light. */
 val didCrossRedLight =
     predicate(Vehicle::class) { ctx, v ->
       eventually(v) { v1 ->
@@ -337,24 +381,31 @@ val didCrossRedLight =
       }
     }
 
+/** [Vehicle] v is located in the last 3 meters of its [Lane]. */
 val isAtEndOfRoad =
     predicate(Vehicle::class) { _, v -> v.positionOnLane >= v.lane.laneLength - 3.0 }
 
+/** [Vehicle] v has a stop sign at the end of its [Lane]. */
 val hasStopSign = predicate(Vehicle::class) { _, v -> eventually(v) { v -> v.lane.hasStopSign } }
 
+/** [Vehicle] v has a yield sign at the end of its [Lane]. */
 val hasYieldSign = predicate(Vehicle::class) { _, v -> eventually(v) { v -> v.lane.hasYieldSign } }
 
+/** [Vehicle] v0 must yield to [Vehicle] v1. */
 val mustYield =
     predicate(Vehicle::class to Vehicle::class) { _, v0, v1 ->
       eventually(v0, v1) { v0, v1 -> v0.lane.yieldLanes.any { it.lane == v1.lane } }
     }
 
+/** [Vehicle] v made a right turn. */
 val makesRightTurn =
     predicate(Vehicle::class) { _, v -> minPrevalence(v, 0.8) { v -> v.lane.isTurningRight } }
 
+/** [Vehicle] v made a left turn. */
 val makesLeftTurn =
     predicate(Vehicle::class) { _, v -> minPrevalence(v, 0.8) { v -> v.lane.isTurningLeft } }
 
+/** [Vehicle] v made no turn. */
 val makesNoTurn =
     predicate(Vehicle::class) { _, v -> minPrevalence(v, 0.8) { v -> v.lane.isStraight } }
 

@@ -121,14 +121,14 @@ data class MUntil(
 data class MExists(
     val ref: Ref<*>,
     val inner: MState,
-// val proofs: MutableList<Tree> = mutableListOf(),
+    // val proofs: MutableList<Tree> = mutableListOf(),
 ) : MState
 
 data class MForall(
     val ref: Ref<*>,
     val inner: MState,
-// val proofs: MutableList<Proof> = mutableListOf(),
-// val tsTp: MutableList<Pair<TS, TP>> = mutableListOf()
+    // val proofs: MutableList<Proof> = mutableListOf(),
+    // val tsTp: MutableList<Pair<TS, TP>> = mutableListOf()
 ) : MState
 
 data class MPastMinPrev(

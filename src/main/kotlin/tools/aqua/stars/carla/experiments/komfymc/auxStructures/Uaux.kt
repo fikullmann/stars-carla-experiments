@@ -224,8 +224,7 @@ class Uaux(
       }
     }
     sAlphasBeta.iterator().forEach { proofList ->
-          proofList
-              .dropWhile { (_, p) -> tsTpOf(p.beta.at()) < (firstTs + interval.startVal) }
+      proofList.dropWhile { (_, p) -> tsTpOf(p.beta.at()) < (firstTs + interval.startVal) }
     }
     sAlphasBeta = sAlphasBeta.dropWhile { it.isEmpty() }.toMutableList()
     if (sAlphasBeta.isEmpty()) {
@@ -278,11 +277,9 @@ class Uaux(
       vBetasAlpha[i] =
           curBetasAlpha.fold(mutableListOf()) { acc, (vts, vp) ->
             // check if earliest timepoint in vProof is outside the bound (firstTs + a)
-             // if out then remove the earliest part of the proof
+            // if out then remove the earliest part of the proof
             do {
-              var isOut =
-                  tsTpIn[etp(vp)]?.let { ts -> ts < (firstTs + a) }
-                      ?: true
+              var isOut = tsTpIn[etp(vp)]?.let { ts -> ts < (firstTs + a) } ?: true
               if (vp.vBetas.size > 1) vp.vBetas.removeFirst() else isOut = false
             } while (isOut)
             if (vp.vBetas.size > 1) acc.add(vts to vp)

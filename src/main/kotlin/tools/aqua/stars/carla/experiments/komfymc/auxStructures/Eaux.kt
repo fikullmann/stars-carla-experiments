@@ -20,16 +20,16 @@ package tools.aqua.auxStructures
 import tools.aqua.stars.carla.experiments.komfymc.*
 
 class Eaux(
-  private var sAlphas: MutableList<Pair<TS, SatProof>> = mutableListOf(),
-  private var vAlphas: MutableList<Pair<TS, Proof>> = mutableListOf(),
-  private var optimalProofs: MutableList<Pair<TS, Proof>> = mutableListOf(),
-  val endTS: Double? = null,
+    private var sAlphas: MutableList<Pair<TS, SatProof>> = mutableListOf(),
+    private var vAlphas: MutableList<Pair<TS, Proof>> = mutableListOf(),
+    private var optimalProofs: MutableList<Pair<TS, Proof>> = mutableListOf(),
+    val endTS: Double? = null,
 ) : TAux() {
   /** updates the Eaux structure at arrival of a new TS/TP */
   fun updateEaux(interval: Interval, nts: TS, ntp: TP, p1: Proof): MutableList<Proof> {
     val iStart = interval.startVal
     val iEnd =
-      if (interval is BoundedInterval) interval.endVal else endTS ?: throw UnboundedFuture()
+        if (interval is BoundedInterval) interval.endVal else endTS ?: throw UnboundedFuture()
     val adjInterval = BoundedInterval(iStart, iEnd)
     shiftEaux(adjInterval, nts, ntp)
     addTsTpFuture(adjInterval, nts, ntp)
@@ -46,15 +46,15 @@ class Eaux(
   }
 
   fun copy() =
-    Eaux(
-      sAlphas.map { it.copy() }.toMutableList(),
-      vAlphas.map { it.copy() }.toMutableList(),
-      optimalProofs.map { it.copy() }.toMutableList(),
-      endTS)
-      .also {
-        it.tsTpOut = tsTpOut.toMutableMap()
-        it.tsTpIn = tsTpIn.toMutableMap()
-      }
+      Eaux(
+              sAlphas.map { it.copy() }.toMutableList(),
+              vAlphas.map { it.copy() }.toMutableList(),
+              optimalProofs.map { it.copy() }.toMutableList(),
+              endTS)
+          .also {
+            it.tsTpOut = tsTpOut.toMutableMap()
+            it.tsTpIn = tsTpIn.toMutableMap()
+          }
 
   fun update(interval: Interval, nts: TS, ntp: TP, p1: Proof): Pair<MutableList<Proof>, Eaux> {
     val copy = copy()
@@ -96,10 +96,16 @@ class Eaux(
     dropFirstTsTp()
     val (firstTp, firstTs) = firstTsTp() ?: (ntp to nts)
 
-    sAlphas = sAlphas.filterNot { (ts, p) -> ts < (firstTs + interval.startVal) || p.at() < firstTp  }.toMutableList()
-    //sAlphas.removeIf { (ts, p) -> ts < (firstTs + interval.startVal) || p.at() < firstTp }
-    vAlphas = vAlphas.filterNotTo(mutableListOf()) { (ts, p) -> ts < (firstTs + interval.startVal) || p.at() < firstTp }
-      //vAlphas.removeIf { (ts, p) -> ts < (firstTs + interval.startVal) || p.at() < firstTp }
+    sAlphas =
+        sAlphas
+            .filterNot { (ts, p) -> ts < (firstTs + interval.startVal) || p.at() < firstTp }
+            .toMutableList()
+    // sAlphas.removeIf { (ts, p) -> ts < (firstTs + interval.startVal) || p.at() < firstTp }
+    vAlphas =
+        vAlphas.filterNotTo(mutableListOf()) { (ts, p) ->
+          ts < (firstTs + interval.startVal) || p.at() < firstTp
+        }
+    // vAlphas.removeIf { (ts, p) -> ts < (firstTs + interval.startVal) || p.at() < firstTp }
     shiftTsTpFuture(interval, firstTs, ntp)
   }
 }

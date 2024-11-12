@@ -40,19 +40,19 @@ fun test(x: Option, single: Boolean) {
     tscEvaluation(dslTsc())
   }
   if (x == Option.Weather) {
-      if (!single) tscEvaluation(weather())
+    if (!single) tscEvaluation(weather())
     tscEvaluation(dslWeather())
   }
   if (x == Option.RoadType) {
-      if (!single) tscEvaluation(roadType())
+    if (!single) tscEvaluation(roadType())
     tscEvaluation(dslRoadType())
   }
   if (x == Option.TrafficDensity) {
-      if (!single) tscEvaluation(trafficDensity())
+    if (!single) tscEvaluation(trafficDensity())
     tscEvaluation(dslTrafficDensity())
   }
   if (x == Option.TimeDay) {
-      if (!single) tscEvaluation(timeDay())
+    if (!single) tscEvaluation(timeDay())
     tscEvaluation(dslTimeDay())
   }
 }

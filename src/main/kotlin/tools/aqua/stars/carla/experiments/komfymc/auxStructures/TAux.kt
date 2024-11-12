@@ -26,7 +26,8 @@ abstract open class TAux(
     var tsTpIn: MutableMap<TP, TS> = mutableMapOf(),
     var tsTpOut: MutableMap<TP, TS> = mutableMapOf(),
 ) {
-  fun firstTsTp() = tsTpOut.entries.firstOrNull()?.toPair() ?: tsTpIn.entries.firstOrNull()?.toPair()
+  fun firstTsTp() =
+      tsTpOut.entries.firstOrNull()?.toPair() ?: tsTpIn.entries.firstOrNull()?.toPair()
 
   fun dropFirstTsTp() {
     if (tsTpOut.isNotEmpty()) {
@@ -89,11 +90,10 @@ abstract open class TAux(
       if (endTS == nts.i) {
         (tsTpOut + tsTpIn)
       } else
-        (tsTpIn.filter { (_,v) -> v + interval.endVal < nts } +
-                  tsTpOut.filter { (_,v) -> v + interval.endVal < nts })
+          (tsTpIn.filter { (_, v) -> v + interval.endVal < nts } +
+              tsTpOut.filter { (_, v) -> v + interval.endVal < nts })
 
-  fun tsTpOf(stp: TP): TS =
-    tsTpOut[stp] ?: tsTpIn[stp] ?: throw NoExistingTsTp()
+  fun tsTpOf(stp: TP): TS = tsTpOut[stp] ?: tsTpIn[stp] ?: throw NoExistingTsTp()
 
   fun etp(tp: TP): TP {
     return when (tsTpIn.entries.firstOrNull()) {
