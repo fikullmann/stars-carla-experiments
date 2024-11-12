@@ -1,5 +1,5 @@
 /*
- * Copyright 2023-2024 The STARS Carla Experiments Authors
+ * Copyright 2024 The STARS Carla Experiments Authors
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,16 +15,16 @@
  * limitations under the License.
  */
 
-package tools.aqua.stars.carla.experiments
+package tools.aqua.dsl
 
-// The download size is approximately 1.3GB!
-// Manual download via: https://zenodo.org/record/8131947
-val DOWNLOAD_EXPERIMENTS_DATA = false
+data class Leq<Type>(val lhs: Term<Type>, val rhs: Term<Type>) : Formula
 
-val USE_EVERY_VEHICLE_AS_EGO = false
-val MIN_SEGMENT_TICK_COUNT = 10
-val SIMULATION_RUN_FOLDER = "./stars-reproduction-source/stars-experiments-data/simulation_runs"
-val PROJECTION_IGNORE_LIST = listOf<String>()
-val FILTER_REGEX = ".*"
-val STATIC_FILTER_REGEX = ".*"
-val SORT_BY_SEED = true
+data class Geq<Type>(val lhs: Term<Type>, val rhs: Term<Type>) : Formula
+
+data class Lt<Type>(val lhs: Term<Type>, val rhs: Term<Type>) : Formula
+
+data class Gt<Type>(val lhs: Term<Type>, val rhs: Term<Type>) : Formula
+
+data class Eq<Type>(val lhs: Term<Type>, val rhs: Term<Type>) : Formula
+
+data class Ne<Type>(val lhs: Term<Type>, val rhs: Term<Type>) : Formula

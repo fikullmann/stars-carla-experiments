@@ -22,7 +22,6 @@ import kotlin.math.sign
 import tools.aqua.stars.core.evaluation.BinaryPredicate.Companion.predicate
 import tools.aqua.stars.core.evaluation.PredicateContext
 import tools.aqua.stars.core.evaluation.UnaryPredicate.Companion.predicate
-import tools.aqua.stars.data.av.*
 import tools.aqua.stars.data.av.dataclasses.*
 import tools.aqua.stars.logic.kcmftbl.*
 
@@ -132,11 +131,22 @@ val behind =
     }
 
 val follows =
-    predicate(Vehicle::class to Vehicle::class) { ctx, v0, v1 ->
-      eventually(v0, v1) { v0, v1 ->
-        globally(v0, v1, 0.0 to 30.0) { v0, v1 -> behind.holds(ctx, v0, v1) } &&
-            eventually(v0, v1, 30.0 to 31.0) { _, _ -> true }
+    predicate(Vehicle::class to Vehicle::class) { ctx, ego, v1 ->
+      eventually(ego, v1) { ego, v1 ->
+        globally(ego, v1, 0.0 to 30.0) { ego, v1 -> behind.holds(ctx, ego, v1) } &&
+            eventually(ego, v1, 30.0 to 31.0) { _, _ -> true }
       }
+    }
+
+fun follows2(ctx: PredicateContext<Actor, TickData, Segment>) =
+    ctx.entityIds.any { otherVehicleId ->
+      predicate(Vehicle::class to Vehicle::class) { ctx, ego, v1 ->
+            eventually(ego, v1) { ego, v1 ->
+              globally(ego, v1, 0.0 to 30.0) { ego, v1 -> behind.holds(ctx, ego, v1) } &&
+                  eventually(ego, v1, 30.0 to 31.0) { _, _ -> true }
+            }
+          }
+          .holds(ctx, actor2 = otherVehicleId)
     }
 
 val mphLimit90 =

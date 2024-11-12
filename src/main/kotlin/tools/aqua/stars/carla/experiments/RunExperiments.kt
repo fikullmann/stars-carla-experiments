@@ -27,6 +27,7 @@ import kotlin.io.path.name
 import tools.aqua.stars.core.evaluation.TSCEvaluation
 import tools.aqua.stars.core.metric.metrics.evaluation.*
 import tools.aqua.stars.core.metric.metrics.postEvaluation.*
+import tools.aqua.stars.core.tsc.TSC
 import tools.aqua.stars.data.av.dataclasses.Actor
 import tools.aqua.stars.data.av.dataclasses.Segment
 import tools.aqua.stars.data.av.dataclasses.TickData
@@ -35,9 +36,12 @@ import tools.aqua.stars.importer.carla.CarlaSimulationRunsWrapper
 import tools.aqua.stars.importer.carla.loadSegments
 
 fun main() {
-  downloadAndUnzipExperimentsData()
 
-  val tsc = tsc()
+  downloadAndUnzipExperimentsData()
+  test(Option.RoadType, true)
+}
+
+fun tscEvaluation(tsc: TSC<Actor, TickData, Segment>) {
 
   val simulationRunsWrappers = getSimulationRuns()
   val segments =
@@ -111,28 +115,36 @@ fun getSimulationRuns(): List<CarlaSimulationRunsWrapper> {
                 STATIC_FILTER_REGEX.toRegex().containsMatchIn(it.name)
           }
           .toList()
-  return mapFolders.mapNotNull { mapFolder ->
-    var staticFile: Path? = null
-    val dynamicFiles = mutableListOf<Path>()
-    mapFolder.walk().forEach { mapFile ->
-      if (mapFile.nameWithoutExtension.contains("static_data") &&
-          STATIC_FILTER_REGEX.toRegex().containsMatchIn(mapFile.name)) {
-        staticFile = mapFile.toPath()
-      }
-      if (mapFile.nameWithoutExtension.contains("dynamic_data") &&
-          FILTER_REGEX.toRegex().containsMatchIn(mapFile.name)) {
-        dynamicFiles.add(mapFile.toPath())
-      }
-    }
-    if (dynamicFiles.isEmpty()) {
-      return@mapNotNull null
-    }
+  var first = true
+  val xyz =
+      mapFolders.mapNotNull { mapFolder ->
+        // if (first) {
+        // first = false
+        var staticFile: Path? = null
+        val dynamicFiles = mutableListOf<Path>()
+        mapFolder.walk().forEach { mapFile ->
+          if (mapFile.nameWithoutExtension.contains("static_data") &&
+              STATIC_FILTER_REGEX.toRegex().containsMatchIn(mapFile.name)) {
+            staticFile = mapFile.toPath()
+          }
+          if (mapFile.nameWithoutExtension.contains("dynamic_data") &&
+              FILTER_REGEX.toRegex().containsMatchIn(mapFile.name)) {
+            if (dynamicFiles.isEmpty()) {
+              dynamicFiles.add(mapFile.toPath())
+            }
+          }
+        }
+        if (dynamicFiles.isEmpty()) {
+          return@mapNotNull null
+        }
 
-    dynamicFiles.sortBy {
-      "_seed([0-9]{1,4})".toRegex().find(it.fileName.name)?.groups?.get(1)?.value?.toInt() ?: 0
-    }
-    return@mapNotNull CarlaSimulationRunsWrapper(staticFile!!, dynamicFiles)
-  }
+        dynamicFiles.sortBy {
+          "_seed([0-9]{1,4})".toRegex().find(it.fileName.name)?.groups?.get(1)?.value?.toInt() ?: 0
+        }
+        return@mapNotNull CarlaSimulationRunsWrapper(staticFile!!, dynamicFiles)
+        // } else null
+      }
+  return xyz
 }
 
 /** Download the experiments data and saves it in the root directory of the project. */

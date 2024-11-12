@@ -1,5 +1,5 @@
 /*
- * Copyright 2023-2024 The STARS Carla Experiments Authors
+ * Copyright 2024 The STARS Carla Experiments Authors
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,16 +15,22 @@
  * limitations under the License.
  */
 
-package tools.aqua.stars.carla.experiments
+@file:Suppress("unused")
 
-// The download size is approximately 1.3GB!
-// Manual download via: https://zenodo.org/record/8131947
-val DOWNLOAD_EXPERIMENTS_DATA = false
+package tools.aqua.stars.carla.experiments.komfymc.dsl
 
-val USE_EVERY_VEHICLE_AS_EGO = false
-val MIN_SEGMENT_TICK_COUNT = 10
-val SIMULATION_RUN_FOLDER = "./stars-reproduction-source/stars-experiments-data/simulation_runs"
-val PROJECTION_IGNORE_LIST = listOf<String>()
-val FILTER_REGEX = ".*"
-val STATIC_FILTER_REGEX = ".*"
-val SORT_BY_SEED = true
+import tools.aqua.stars.core.types.*
+
+class Bind<E1 : EntityType<*, *, *>, T : Any>(
+    val ref: Ref<E1>,
+    private val term: (E1) -> T,
+    val binding: MutableMap<RefId, T> = mutableMapOf(),
+) {
+
+  fun with(entity: E1): T =
+      binding[RefId(entity.id)] ?: throw Exception("The binding was not previously configured.")
+
+  fun calculate() {
+    ref.allAtTick().forEach { e -> binding[RefId(e.id)] = term(e) }
+  }
+}
