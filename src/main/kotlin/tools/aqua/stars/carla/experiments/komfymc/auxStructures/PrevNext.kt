@@ -18,27 +18,29 @@
 package tools.aqua.auxStructures
 
 import tools.aqua.stars.carla.experiments.komfymc.*
+import tools.aqua.stars.core.types.TickDifference
+import tools.aqua.stars.core.types.TickUnit
 
-class PrevNext {
+class PrevNext<U : TickUnit<U, D>, D : TickDifference<D>>() {
   companion object {
-    fun prevNext(
+    fun <U : TickUnit<U, D>, D : TickDifference<D>> prevNext(
         prev: Boolean,
-        interval: Interval,
+        interval: RelativeInterval<D>,
         buf: MutableList<Proof>,
-        timestamps: MutableList<TS>
-    ): Triple<MutableList<Proof>, List<Proof>, MutableList<TS>> {
+        timestamps: MutableList<TS<U, D>>
+    ): Triple<MutableList<Proof>, List<Proof>, MutableList<TS<U, D>>> {
       return if (buf.isEmpty()) Triple(mutableListOf(), listOf(), timestamps)
       else if (timestamps.isEmpty()) Triple(mutableListOf(), buf, mutableListOf())
       else if (timestamps.size == 1) Triple(mutableListOf(), buf, timestamps)
       else prevNextAux(prev, interval, buf, timestamps)
     }
 
-    private fun prevNextAux(
+    private fun <U : TickUnit<U, D>, D : TickDifference<D>> prevNextAux(
         prev: Boolean,
-        interval: Interval,
+        interval: RelativeInterval<D>,
         buf: MutableList<Proof>,
-        timestamps: MutableList<TS>
-    ): Triple<MutableList<Proof>, List<Proof>, MutableList<TS>> {
+        timestamps: MutableList<TS<U, D>>
+    ): Triple<MutableList<Proof>, List<Proof>, MutableList<TS<U, D>>> {
       val t1 = timestamps.removeFirst().i
       val t2 = timestamps.first().i
       val t = t2 - t1
@@ -68,14 +70,14 @@ class PrevNext {
 
 class MPrevNext {
   companion object {
-    fun update(
+    fun <U : TickUnit<U, D>, D : TickDifference<D>> update(
         prev: Boolean,
-        interval: Interval,
+        interval: RelativeInterval<D>,
         p: Proof,
-        t1: TS,
-        t2: TS,
+        t1: TS<U, D>,
+        t2: TS<U, D>,
     ): Proof {
-      val t = (t2 - t1).i
+      val t = (t2.i - t1.i)
       val prevNextProofs: MutableList<Proof> =
           when {
             p is SatProof && interval.contains(t) ->

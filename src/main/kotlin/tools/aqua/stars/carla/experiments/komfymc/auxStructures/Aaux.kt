@@ -18,67 +18,77 @@
 package tools.aqua.auxStructures
 
 import tools.aqua.stars.carla.experiments.komfymc.*
+import tools.aqua.stars.carla.experiments.komfymc.auxStructures.FutureAux
+import tools.aqua.stars.core.types.TickDifference
+import tools.aqua.stars.core.types.TickUnit
 
-data class Aaux(
-    private var sAlphas: MutableList<Pair<TS, SatProof>> = mutableListOf(),
-    private var vAlphas: MutableList<Pair<TS, Proof>> = mutableListOf(),
-    private var optimalProofs: MutableList<Pair<TS, Proof>> = mutableListOf(),
-    val endTS: Double? = null,
-) : TAux() {
+class Aaux<U : TickUnit<U, D>, D : TickDifference<D>>(
+    endTS: TS<U, D>? = null,
+    private var sAlphas: MutableList<Pair<TS<U, D>, SatProof>> = mutableListOf(),
+    private var vAlphas: MutableList<Pair<TS<U, D>, Proof>> = mutableListOf(),
+) : FutureAux<U, D>(endTS) {
   fun copy() =
-      Aaux(
+      Aaux(endTS,
               sAlphas.map { it.copy() }.toMutableList(),
-              vAlphas.map { it.copy() }.toMutableList(),
-              optimalProofs.map { it.copy() }.toMutableList(),
-              endTS)
-          .also {
-            it.tsTpOut = tsTpOut.toMutableMap()
-            it.tsTpIn = tsTpIn.toMutableMap()
+              vAlphas.map { it.copy() }.toMutableList())
+          .also { aux ->
+            aux.tsTpOut = tsTpOut.toMutableMap()
+            aux.tsTpIn = tsTpIn.toMutableMap()
+            aux.optimalProofs = aux.optimalProofs.map { it.copy() }.toMutableList()
           }
   /** updates the Eaux structure at arrival of a new TS/TP */
-  fun updateAaux(interval: Interval, nts: TS, ntp: TP, p1: Proof): MutableList<Proof> {
-    val iStart = interval.startVal
-    val iEnd =
-        if (interval is BoundedInterval) interval.endVal else endTS ?: throw UnboundedFuture()
-    val adjInterval = BoundedInterval(iStart, iEnd)
-    shiftAaux(adjInterval, nts, ntp)
-    addTsTpFuture(adjInterval, nts, ntp)
-    addSubps(adjInterval, nts, ntp, p1)
+  fun updateAaux(
+      interval: RelativeInterval<D>,
+      nts: TS<U, D>,
+      ntp: TP,
+      p1: Proof
+  ): MutableList<Proof> {
+    shiftAaux(interval, nts, ntp)
+    addTsTpFuture(interval, nts, ntp)
+    addSubps(interval, nts, ntp, p1)
 
-    shiftAaux(adjInterval, nts, ntp, endTS)
-    if (endTS == nts.i) {
-      return optimalProofs.map { it.second }.toMutableList()
-    } else {
-      val result = optimalProofs.filter { (ts, _) -> (ts + iEnd < nts) }
-      optimalProofs.removeIf { (ts, _) -> (ts + iEnd < nts) }
-      return result.map { it.second }.toMutableList()
-    }
+    shiftAaux(interval, nts, ntp, endTS)
+    return findOptimalProofs(interval, nts)
   }
 
   /** updates the Eaux structure at arrival of a new TS/TP */
-  fun update(interval: Interval, nts: TS, ntp: TP, p1: Proof): Pair<MutableList<Proof>, Aaux> {
-    val copy = copy()
-    val result = copy.updateAaux(interval, nts, ntp, p1)
-    return result to copy
+  fun update(
+      interval: RelativeInterval<D>,
+      nts: TS<U, D>,
+      ntp: TP,
+      p1: Proof
+  ): Pair<MutableList<Proof>, Aaux<U, D>> {
+      if (ntp.i == 0) {
+          val copy = copy()
+          val result = copy.updateAaux(interval, nts, ntp, p1)
+          return result to copy
+      } else {
+          return updateAaux(interval, nts, ntp, p1) to this
+      }
   }
 
-  private fun addSubps(interval: BoundedInterval, nts: TS, ntp: TP, proof: Proof) {
-    val firstTS = firstTsTp()?.second?.i ?: 0.0
+  private fun addSubps(interval: RelativeInterval<D>, nts: TS<U, D>, ntp: TP, proof: Proof) {
+    val firstTS = firstTsTp()?.second ?: throw NoExistingTsTp()
     when (proof) {
       is SatProof -> {
-        if (nts.i >= firstTS + interval.startVal) {
+        if (nts >= firstTS + interval.startVal) {
           sAlphas.add(nts to proof)
           sAlphas.sortBy { it.second.size() }
         }
       }
       is ViolationProof -> {
-        if (nts.i >= firstTS + interval.startVal) vAlphas.add(nts to proof)
+        if (nts >= firstTS + interval.startVal) vAlphas.add(nts to proof)
       }
       else -> throw InvalidProofObject()
     }
   }
 
-  private fun shiftAaux(interval: BoundedInterval, nts: TS, ntp: TP, end: Double? = null) {
+  private fun shiftAaux(
+      interval: RelativeInterval<D>,
+      nts: TS<U, D>,
+      ntp: TP,
+      end: TS<U, D>? = null
+  ) {
     val tsTps = readyTsTps(interval, nts, end)
     tsTps.forEach { (tp, ts) ->
       if (vAlphas.isNotEmpty()) {
@@ -91,12 +101,14 @@ data class Aaux(
     }
   }
 
-  private fun adjustAaux(interval: BoundedInterval, nts: TS, ntp: TP) {
+  private fun adjustAaux(interval: RelativeInterval<D>, nts: TS<U, D>, ntp: TP) {
     dropFirstTsTp()
-    val (firstTp, firstTs) = firstTsTp() ?: (ntp to nts)
+    val (firstTp, firstTS) = firstTsTp() ?: (ntp to nts)
 
-    sAlphas.removeIf { (ts, p) -> ts < (firstTs + interval.startVal) || p.at() < firstTp }
-    vAlphas.removeIf { (ts, p) -> ts < (firstTs + interval.startVal) || p.at() < firstTp }
-    shiftTsTpFuture(interval, firstTs, ntp)
+    sAlphas.removeIf { (ts, p) -> ts < (firstTS + interval.startVal) || p.at() < firstTp }
+    vAlphas.removeIf { (ts, p) ->
+      ts < (interval.startVal?.let { firstTS + it } ?: firstTS) || p.at() < firstTp
+    }
+    shiftTsTpFuture(interval, firstTS, ntp)
   }
 }

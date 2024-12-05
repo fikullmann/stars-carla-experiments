@@ -50,8 +50,12 @@ data class SatVar(val tp: TP, val name: String) : SatProof() {
 }
 
 data class SatNeg(val inner: ViolationProof) : SatProof() {
-  override fun size() = 1 + inner.size()
+    var sizeCache: Int? = null
 
+    override fun size(): Int {
+        sizeCache = sizeCache ?: (1 + inner.size())
+        return sizeCache ?: (1 + inner.size())
+    }
   override fun at(): TP = inner.at()
 }
 
@@ -68,7 +72,12 @@ data class SatOrR(val rhs: Proof) : SatProof() {
 }
 
 data class SatAnd(val lhs: Proof, val rhs: Proof) : SatProof() {
-  override fun size() = 1 + lhs.size() + rhs.size()
+    var sizeCache: Int? = null
+
+    override fun size(): Int {
+        sizeCache = sizeCache ?: (1 + lhs.size() + rhs.size())
+        return sizeCache ?: (1 + lhs.size() + rhs.size())
+    }
 
   override fun at(): TP = lhs.at()
 }
@@ -132,7 +141,7 @@ data class SatEventually(val tp: TP, val alpha: SatProof) : SatProof() {
   var sizeCache: Int? = null
 
   override fun size(): Int {
-    if (sizeCache == null) sizeCache = 1 + alpha.size()
+    sizeCache = sizeCache ?: (1 + alpha.size())
     return sizeCache ?: (1 + alpha.size())
   }
 
@@ -140,8 +149,12 @@ data class SatEventually(val tp: TP, val alpha: SatProof) : SatProof() {
 }
 
 data class SatAlways(val tp1: TP, val tp2: TP, val alphas: MutableList<SatProof>) : SatProof() {
-  override fun size(): Int = 1 + alphas.sumOf { it.size() }
+    var sizeCache: Int? = null
 
+    override fun size(): Int {
+        sizeCache = sizeCache ?: (1 + alphas.sumOf { it.size() })
+        return sizeCache ?: (1 + alphas.sumOf { it.size() })
+    }
   override fun at(): TP = tp1
 }
 
@@ -158,17 +171,22 @@ data class SatUntil(val beta: SatProof, val alphas: MutableList<SatProof>) : Sat
   override fun at(): TP = if (alphas.isEmpty()) beta.at() else alphas.first().at()
 }
 
-data class SatExists<T : EntityType<*, *, *>>(
+data class SatExists<T : EntityType<*, *, *, *, *>>(
     val ref: Ref<T>,
     val witness: RefId?,
     val alpha: SatProof
 ) : SatProof() {
-  override fun size(): Int = 1 + alpha.size()
+    var sizeCache: Int? = null
+
+    override fun size(): Int {
+        sizeCache = sizeCache ?: (1 + alpha.size())
+        return sizeCache ?: (1 + alpha.size())
+    }
 
   override fun at(): TP = alpha.at()
 }
 
-data class SatForall<T : EntityType<*, *, *>>(
+data class SatForall<T : EntityType<*, *, *, *, *>>(
     val ref: Ref<T>,
     val part: List<Pair<RefId?, SatProof>>
 ) : SatProof() {
@@ -177,7 +195,7 @@ data class SatForall<T : EntityType<*, *, *>>(
   override fun at(): TP = part.first().second.at()
 }
 
-data class SatForallNone<T : EntityType<*, *, *>>(val ref: Ref<T>, val tp: TP) : SatProof() {
+data class SatForallNone<T : EntityType<*, *, *, *, *>>(val ref: Ref<T>, val tp: TP) : SatProof() {
   override fun size(): Int = 1
 
   override fun at(): TP = tp
@@ -260,25 +278,46 @@ data class VVar(val tp: TP, val name: String) : ViolationProof() {
 }
 
 data class VNeg(val inner: Proof) : ViolationProof() {
-  override fun size() = 1 + inner.size()
+    var sizeCache: Int? = null
+
+    override fun size(): Int {
+        sizeCache = sizeCache ?: (1 + inner.size())
+        return sizeCache ?: (1 + inner.size())
+    }
 
   override fun at(): TP = inner.at()
 }
 
 data class VAndL(val inner: Proof) : ViolationProof() {
-  override fun size(): Int = 1 + inner.size()
+    var sizeCache: Int? = null
+
+    override fun size(): Int {
+        sizeCache = sizeCache ?: (1 + inner.size())
+        return sizeCache ?: (1 + inner.size())
+    }
 
   override fun at(): TP = inner.at()
 }
 
 data class VAndR(val inner: Proof) : ViolationProof() {
-  override fun size(): Int = 1 + inner.size()
+    var sizeCache: Int? = null
+
+    override fun size(): Int {
+        sizeCache = sizeCache ?: (1 + inner.size())
+        return sizeCache ?: (1 + inner.size())
+    }
 
   override fun at(): TP = inner.at()
 }
 
 data class VOr(val lhs: Proof, val rhs: Proof) : ViolationProof() {
-  override fun size(): Int = 1 + lhs.size() + rhs.size()
+
+    var sizeCache: Int? = null
+
+    override fun size(): Int {
+        sizeCache = sizeCache ?: (1 + lhs.size() + rhs.size())
+        return sizeCache ?: (1 + lhs.size() + rhs.size())
+    }
 
   override fun at(): TP = lhs.at()
 }
@@ -380,7 +419,12 @@ data class VEventually(val tp1: TP, val tp2: TP, val alpha: MutableList<Proof>) 
 }
 
 data class VAlways(val tp: TP, val alpha: Proof) : ViolationProof() {
-  override fun size(): Int = 1 + alpha.size()
+    var sizeCache: Int? = null
+
+    override fun size(): Int {
+        sizeCache = sizeCache ?: (1 + alpha.size())
+        return sizeCache ?: (1 + alpha.size())
+    }
 
   override fun at(): TP = tp
 }
@@ -417,22 +461,29 @@ data class VUntilInf(val tp1: TP, val tp2: TP, val vBetas: MutableList<Proof>) :
   override fun at(): TP = tp1
 }
 
-data class VExists<T : EntityType<*, *, *>>(
+data class VExists<T : EntityType<*, *, *, *, *>>(
     val ref: Ref<T>,
     val part: List<Pair<RefId?, ViolationProof>>
 ) : ViolationProof() {
-  override fun size(): Int = 1 + part.fold(0) { acc, (_, proof) -> acc + proof.size() }
+    var sizeCache: Int? = null
+
+    override fun size(): Int {
+        sizeCache = sizeCache ?: (1 + part.sumOf { (_, proof) -> proof.size() })
+        return sizeCache ?: (1 + part.sumOf { (_, proof) -> proof.size()})
+    }
+  //override fun size(): Int = 1 + part.fold(0) { acc, (_, proof) -> acc + proof.size() }
 
   override fun at(): TP = part.first().second.at()
 }
 
-data class VExistsNone<T : EntityType<*, *, *>>(val ref: Ref<T>, val tp: TP) : ViolationProof() {
+data class VExistsNone<T : EntityType<*, *, *, *, *>>(val ref: Ref<T>, val tp: TP) :
+    ViolationProof() {
   override fun size(): Int = 1
 
   override fun at(): TP = tp
 }
 
-data class VForall<T : EntityType<*, *, *>>(
+data class VForall<T : EntityType<*, *, *, *, *>>(
     val ref: Ref<T>,
     val witness: RefId?,
     val alpha: ViolationProof

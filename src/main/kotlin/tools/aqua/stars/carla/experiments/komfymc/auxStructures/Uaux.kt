@@ -17,52 +17,52 @@
 
 package tools.aqua.auxStructures
 
-import kotlin.math.abs
 import tools.aqua.stars.carla.experiments.komfymc.*
+import tools.aqua.stars.carla.experiments.komfymc.auxStructures.FutureAux
+import tools.aqua.stars.core.types.TickDifference
+import tools.aqua.stars.core.types.TickUnit
 
 var i = 0
 
-class Uaux(
-    private var sAlphasBeta: MutableList<MutableList<Pair<TS, SatUntil>>> =
+class Uaux<U : TickUnit<U, D>, D : TickDifference<D>>(
+    endTS: TS<U, D>? = null,
+    private var sAlphasBeta: MutableList<MutableList<Pair<TS<U, D>, SatUntil>>> =
         mutableListOf(mutableListOf()),
-    private var sAlphasSuffix: MutableList<Pair<TS, SatProof>> = mutableListOf(),
-    private var vBetasAlpha: MutableList<MutableList<Pair<TS, VUntil>>> =
+    private var sAlphasSuffix: MutableList<Pair<TS<U, D>, SatProof>> = mutableListOf(),
+    private var vBetasAlpha: MutableList<MutableList<Pair<TS<U, D>, VUntil>>> =
         mutableListOf(mutableListOf()),
-    private var vAlphasOut: MutableList<Pair<TS, Proof>> = mutableListOf(),
-    private var vAlphasIn: MutableList<Pair<TS, Proof>> = mutableListOf(),
-    private var vBetasSuffixIn: MutableList<Pair<TS, ViolationProof>> = mutableListOf(),
-    private var optimalProofs: MutableList<Pair<TS, Proof>> = mutableListOf(),
-    val endTS: Double? = null
-) : TAux() {
-  /** updates the Uaux structure at arrival of a new TS/TP */
-  fun updateUaux(interval: Interval, nts: TS, ntp: TP, p1: Proof, p2: Proof): MutableList<Proof> {
-    i++
-    if (i % 155 == 1) {
-      print("")
-    }
-    val iStart = interval.startVal
-    val iEnd =
-        if (interval is BoundedInterval) interval.endVal else endTS ?: throw UnboundedFuture()
-    val adjInterval = BoundedInterval(iStart, iEnd)
-    shiftUaux(adjInterval, nts, ntp)
-    addTsTpFuture(adjInterval, nts, ntp)
-    addSubps(adjInterval, nts, ntp, p1, p2)
+    private var vAlphasOut: MutableList<Pair<TS<U, D>, Proof>> = mutableListOf(),
+    private var vAlphasIn: MutableList<Pair<TS<U, D>, Proof>> = mutableListOf(),
+    private var vBetasSuffixIn: MutableList<Pair<TS<U, D>, ViolationProof>> = mutableListOf(),
 
-    shiftUaux(adjInterval, nts, ntp, endTS)
-    if (endTS == nts.i) {
-      return optimalProofs.map { it.second }.toMutableList()
-    } else {
-      val result = optimalProofs.filter { (ts, _) -> (ts + iEnd < nts) }
-      optimalProofs.removeIf { (ts, _) -> (ts + iEnd < nts) }
-      return result.map { it.second }.toMutableList()
-    }
+) : FutureAux<U, D>(endTS) {
+  /** updates the Uaux structure at arrival of a new TS/TP */
+  fun updateUaux(
+      interval: RelativeInterval<D>,
+      nts: TS<U, D>,
+      ntp: TP,
+      p1: Proof,
+      p2: Proof
+  ): MutableList<Proof> {
+    shiftUaux(interval, nts, ntp)
+    addTsTpFuture(interval, nts, ntp)
+    addSubps(interval, nts, ntp, p1, p2)
+
+    shiftUaux(interval, nts, ntp, endTS)
+    return findOptimalProofs(interval, nts)
   }
 
-  private fun addSubps(interval: BoundedInterval, nts: TS, ntp: TP, p1: Proof, p2: Proof) {
-    val firstTS = firstTsTp()?.second?.i ?: 0.0
+  private fun addSubps(
+      interval: RelativeInterval<D>,
+      nts: TS<U, D>,
+      ntp: TP,
+      p1: Proof,
+      p2: Proof
+  ) {
+    val firstTS = firstTsTp()?.second ?: throw NoExistingTsTp()
     when {
       p1 is SatProof && p2 is SatProof -> {
-        if (nts.i >= firstTS + interval.startVal) {
+        if (nts >= firstTS + interval.startVal) {
           // sAlphasBeta
           val currAlphasBeta = sAlphasBeta.removeLast()
           currAlphasBeta.add(nts to SatUntil(p2, sAlphasSuffix.map { it.second }.toMutableList()))
@@ -83,12 +83,12 @@ class Uaux(
         // sAlphasSuffix
         sAlphasSuffix.add(nts to p1)
         // vBetasIn
-        if (nts.i >= firstTS + interval.startVal) {
+        if (nts >= firstTS + interval.startVal) {
           vBetasSuffixIn.add(nts to p2)
         }
       }
       p1 is ViolationProof && p2 is SatProof -> {
-        if (nts.i >= firstTS + interval.startVal) {
+        if (nts >= firstTS + interval.startVal) {
           // sAlphasBeta
           val currAlphasBeta = sAlphasBeta.removeLast()
           currAlphasBeta.add(nts to SatUntil(p2, sAlphasSuffix.map { it.second }.toMutableList()))
@@ -102,7 +102,7 @@ class Uaux(
           // vBetasSuffixIn
           vBetasSuffixIn.clear()
           // vAlphasIn
-          vAlphasIn.add(nts to p1)
+          if (interval.startVal != null) vAlphasIn.add(nts to p1)
         } else {
           vAlphasOut.removeIf { (_, proof) -> proof >= p1 }
           vAlphasOut.add(nts to p1)
@@ -121,18 +121,22 @@ class Uaux(
         }
         sAlphasSuffix.clear()
 
-        if (nts.i >= firstTS + interval.startVal) {
+        if (nts >= firstTS + interval.startVal) {
           // vBetasSuffixIn
           vBetasSuffixIn.add(nts to p2)
           // vBetasAlpha
-          val curBetasAlphas = vBetasAlpha.removeLast()
-          curBetasAlphas.add(
-              nts to VUntil(ntp, p1, vBetasSuffixIn.map { it.second }.toMutableList()))
-          curBetasAlphas.sortBy { it.second.at() }
-          vBetasAlpha.add(curBetasAlphas)
+            if (vBetasSuffixIn.size < tsTpIn.size) {
+                val curBetasAlphas = vBetasAlpha.removeLast()
+                curBetasAlphas.add(nts to VUntil(ntp, p1, vBetasSuffixIn.map { it.second }.toMutableList()))
+                curBetasAlphas.sortBy { it.second.at() }
+                vBetasAlpha.add(curBetasAlphas)
+            } else {
+                vBetasAlpha.removeLast()
+                vBetasAlpha.add(mutableListOf(nts to VUntil(ntp, p1, vBetasSuffixIn.map { it.second }.toMutableList())))
+            }
 
           // vAlphasIn
-          vAlphasIn.add(nts to p1)
+          if (interval.startVal != null) vAlphasIn.add(nts to p1)
         } else {
           vAlphasOut.removeIf { (_, proof) -> proof >= p1 }
           vAlphasOut.add(nts to p1)
@@ -141,7 +145,12 @@ class Uaux(
     }
   }
 
-  private fun shiftUaux(interval: BoundedInterval, nts: TS, ntp: TP, end: Double? = null) {
+  private fun shiftUaux(
+      interval: RelativeInterval<D>,
+      nts: TS<U, D>,
+      ntp: TP,
+      end: TS<U, D>? = null
+  ) {
     val tsTps = readyTsTps(interval, nts, end)
     tsTps.forEach { (tp, ts) ->
       val optimalProofsLen = optimalProofs.size
@@ -167,14 +176,10 @@ class Uaux(
           proofs.add(VUntil(tp, vAOProof, mutableListOf()))
         }
         if (vBetasSuffixIn.size == tsTpIn.size) {
-          val ltp = vBetasSuffixIn.lastOrNull()?.second?.at() ?: ltp(tp)
-          proofs.add(VUntilInf(tp, ltp, vBetasSuffixIn.map { it.second }.toMutableList()))
+            val ltp = vBetasSuffixIn.lastOrNull()?.second?.at() ?: ltp(tp)
+            proofs.add(VUntilInf(tp, ltp, vBetasSuffixIn.map { it.second }.toMutableList()))
         }
 
-        if (proofs.isEmpty()) {
-          println(i)
-          println("ayayay ${nts.i}")
-        }
         val minProof =
             proofs.reduce { acc, newProof -> if (acc.size() < newProof.size()) acc else newProof }
         optimalProofs.add(ts to minProof)
@@ -183,29 +188,26 @@ class Uaux(
     }
   }
 
-  private fun adjustUaux(interval: BoundedInterval, nts: TS, ntp: TP) {
+  private fun adjustUaux(interval: RelativeInterval<D>, nts: TS<U, D>, ntp: TP) {
     val evalTp = firstTsTp()?.first ?: throw NoExistingTsTp()
     dropFirstTsTp()
-    val (firstTp, firstTs) = firstTsTp() ?: (ntp to nts)
+    val (firstTp, firstTS) = firstTsTp() ?: (ntp to nts)
 
     // vBetasAlpha
-    vBetasAlpha.forEachIndexed { i, proofList ->
-      vBetasAlpha[i] =
-          proofList
-              .dropWhile { (ts, proof) ->
-                ts < firstTs + interval.startVal || (proof.at() < firstTp)
-              }
-              .toMutableList()
+    vBetasAlpha.mutate { proofList ->
+          proofList.filterNot { (ts, proof) ->
+                ts < (interval.startVal?.let { firstTS + it } ?: firstTS) || (proof.at() < firstTp)
+              }.toMutableList()
     }
-    if (abs(interval.startVal) < 0.0001) {
+    if (interval.startVal == null) {
       dropUauxSingleTs(evalTp)
-    } else dropUauxTs(interval.startVal, firstTs)
-    vBetasAlpha = vBetasAlpha.dropWhile { d -> d.isEmpty() }.toMutableList()
+    } else dropUauxTs(interval.startVal, firstTS)
+    vBetasAlpha = vBetasAlpha.filter { d -> d.isNotEmpty() }.toMutableList()
     if (vBetasAlpha.isEmpty()) {
       vBetasAlpha.add(mutableListOf())
     }
     // tstpin and out
-    shiftTsTpFuture(interval, firstTs, ntp)
+    shiftTsTpFuture(interval, firstTS, ntp)
 
     // alphas beta
     sAlphasBeta.first().let { frontAlphasBeta ->
@@ -223,8 +225,13 @@ class Uaux(
                 .toMutableList()
       }
     }
-    sAlphasBeta.iterator().forEach { proofList ->
-      proofList.dropWhile { (_, p) -> tsTpOf(p.beta.at()) < (firstTs + interval.startVal) }
+    sAlphasBeta.forEachIndexed { i, proofList ->
+      sAlphasBeta[i] =
+          proofList
+              .dropWhile { (_, p) ->
+                tsTpOf(p.beta.at()) < (interval.startVal?.let { firstTS + it } ?: firstTS)
+              }
+              .toMutableList()
     }
     sAlphasBeta = sAlphasBeta.dropWhile { it.isEmpty() }.toMutableList()
     if (sAlphasBeta.isEmpty()) {
@@ -232,13 +239,15 @@ class Uaux(
     }
 
     // alphas suffix
-    sAlphasSuffix.removeIf { (_, proof) -> proof.at() < firstTp }
+    sAlphasSuffix = sAlphasSuffix.filterNot { (_, proof) -> proof.at() < firstTp }.toMutableList()
 
     // alphas_in and v_alphas_out
-    vAlphasOut.removeIf { (_, proof) -> proof.at() < firstTp }
-    val shiftToOut: List<Pair<TS, Proof>> =
-        vAlphasIn.filter { (ts, _) -> ts < firstTs + interval.startVal && ts >= firstTs }
-    vAlphasIn.removeIf { (ts, _) -> ts < firstTs + interval.startVal }
+    vAlphasOut = vAlphasOut.filterNot { (_, proof) -> proof.at() < firstTp }.toMutableList()
+    val shiftToOut: List<Pair<TS<U, D>, Proof>> =
+        vAlphasIn.filter { (ts, _) ->
+          ts < (interval.startVal?.let { firstTS + it } ?: firstTS) && ts >= firstTS
+        }
+    vAlphasIn = vAlphasIn.filterNot { (ts, _) -> ts < (interval.startVal?.let { firstTS + it } ?: firstTS) }.toMutableList()
     if (shiftToOut.isNotEmpty()) {
       vAlphasOut.addAll(shiftToOut)
       vAlphasOut.sortBy { it.second.size() }
@@ -260,26 +269,28 @@ class Uaux(
   }
 
   private fun dropUauxSingleTs(evalTP: TP) {
-    val firstBetaAlpha = mutableListOf<Pair<TS, VUntil>>()
+    val firstBetaAlpha = mutableListOf<Pair<TS<U, D>, VUntil>>()
     vBetasAlpha.removeFirst().forEach { (vts, vp) ->
       if (etp(vp) <= evalTP && vp.vBetas.size > 1) {
         vp.vBetas.removeFirst()
         firstBetaAlpha.add(vts to vp)
       } else {
-        firstBetaAlpha.add(vts to vp)
+        firstBetaAlpha.add(0, vts to vp)
       }
+      vBetasAlpha.add(0, firstBetaAlpha)
     }
-    vBetasAlpha.add(0, firstBetaAlpha)
   }
 
-  private fun dropUauxTs(a: Double, firstTs: TS) {
+  private fun dropUauxTs(a: D?, firstTs: TS<U, D>) {
     vBetasAlpha.forEachIndexed { i, curBetasAlpha ->
       vBetasAlpha[i] =
           curBetasAlpha.fold(mutableListOf()) { acc, (vts, vp) ->
             // check if earliest timepoint in vProof is outside the bound (firstTs + a)
             // if out then remove the earliest part of the proof
             do {
-              var isOut = tsTpIn[etp(vp)]?.let { ts -> ts < (firstTs + a) } ?: true
+              var isOut =
+                  tsTpIn[etp(vp)]?.let { ts -> if (a != null) ts < (firstTs + a) else false }
+                      ?: true
               if (vp.vBetas.size > 1) vp.vBetas.removeFirst() else isOut = false
             } while (isOut)
             if (vp.vBetas.size > 1) acc.add(vts to vp)
@@ -291,7 +302,7 @@ class Uaux(
   private fun etp(vp: VUntil) = if (vp.vBetas.isEmpty()) vp.tp else vp.vBetas.first().at()
 
   fun copy() =
-      Uaux(
+      Uaux(endTS,
               sAlphasBeta
                   .map { it.map { inside -> inside.copy() }.toMutableList() }
                   .toMutableList(),
@@ -302,22 +313,26 @@ class Uaux(
               vAlphasOut.map { it.copy() }.toMutableList(),
               vAlphasIn.map { it.copy() }.toMutableList(),
               vBetasSuffixIn.map { it.copy() }.toMutableList(),
-              optimalProofs.map { it.copy() }.toMutableList(),
-              endTS)
-          .also {
-            it.tsTpOut = tsTpOut.toMutableMap()
-            it.tsTpIn = tsTpIn.toMutableMap()
+              )
+          .also { aux ->
+            aux.tsTpOut = tsTpOut.toMutableMap()
+            aux.tsTpIn = tsTpIn.toMutableMap()
+            aux.optimalProofs = aux.optimalProofs.map { it.copy() }.toMutableList()
           }
 
   fun update1(
-      interval: Interval,
-      nts: TS,
+      interval: RelativeInterval<D>,
+      nts: TS<U, D>,
       ntp: TP,
       p1: Proof,
       p2: Proof
-  ): Pair<MutableList<Proof>, Uaux> {
-    val copy = copy()
-    val result = copy.updateUaux(interval, nts, ntp, p1, p2)
-    return result to copy
+  ): Pair<MutableList<Proof>, Uaux<U, D>> {
+      if (ntp.i == 0) {
+          val copy = copy()
+          val result = copy.updateUaux(interval, nts, ntp, p1, p2)
+          return result to copy
+      } else {
+          return updateUaux(interval, nts, ntp, p1, p2) to this
+      }
   }
 }

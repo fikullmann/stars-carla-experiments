@@ -17,16 +17,18 @@
 
 package tools.aqua.auxStructures
 
-import kotlin.math.max
 import tools.aqua.stars.carla.experiments.komfymc.*
+import tools.aqua.stars.carla.experiments.komfymc.auxStructures.TAux
+import tools.aqua.stars.core.types.TickDifference
+import tools.aqua.stars.core.types.TickUnit
 
-class Oaux(
-    private var tsZero: TS? = null,
-    val sAlphasIn: MutableList<Pair<TS, SatProof>> = mutableListOf(),
-    val sAlphasOut: MutableList<Pair<TS, SatProof>> = mutableListOf(),
-    val vAlphasIn: MutableList<Pair<TS, ViolationProof>> = mutableListOf(),
-    val vAlphasOut: MutableList<Pair<TS, ViolationProof>> = mutableListOf()
-) : TAux() {
+class Oaux<U : TickUnit<U, D>, D : TickDifference<D>>(
+    private var tsZero: TS<U, D>? = null,
+    val sAlphasIn: MutableList<Pair<TS<U, D>, SatProof>> = mutableListOf(),
+    val sAlphasOut: MutableList<Pair<TS<U, D>, SatProof>> = mutableListOf(),
+    val vAlphasIn: MutableList<Pair<TS<U, D>, ViolationProof>> = mutableListOf(),
+    val vAlphasOut: MutableList<Pair<TS<U, D>, ViolationProof>> = mutableListOf()
+) : TAux<U, D>() {
   fun copy() =
       Oaux(
               tsZero,
@@ -40,28 +42,36 @@ class Oaux(
             it.tsTpIn = tsTpIn.toMutableMap()
           }
 
-  fun updateOaux(interval: Interval, ts: TS, tp: TP, p: Proof): Proof {
+  fun updateOaux(interval: RelativeInterval<D>, ts: TS<U, D>, tp: TP, p: Proof): Proof {
     val currTsZero = tsZero ?: ts
     tsZero = currTsZero
     addSubps(ts, p)
-    if (ts.i < (currTsZero.i + interval.startVal)) {
+    if (ts < (currTsZero + interval.startVal)) {
       tsTpOut[tp] = ts
       return VOnceOutL(tp)
     } else {
-      val l = if (interval is BoundedInterval) max(0.0, (ts - interval.endVal).i) else currTsZero.i
-      val r = ts.i - interval.startVal
-      shiftOaux(BoundedInterval(l, r), interval.startVal, ts, tp)
+      var l = currTsZero
+      if (interval.endVal != null && currTsZero < (ts - interval.endVal)) {
+        l = (ts - interval.endVal)
+      }
+      val r = (ts + interval.startVal)
+      shiftOaux(RealInterval(l, r), interval.startVal, ts, tp)
       return evalOaux(tp)
     }
   }
 
-  fun update1(interval: Interval, ts: TS, tp: TP, p: Proof): Pair<Proof, Oaux> {
+  fun update1(
+      interval: RelativeInterval<D>,
+      ts: TS<U, D>,
+      tp: TP,
+      p: Proof
+  ): Pair<Proof, Oaux<U, D>> {
     val copy = copy()
     val result = copy.updateOaux(interval, ts, tp, p)
     return result to copy
   }
 
-  private fun addSubps(ts: TS, p: Proof) {
+  private fun addSubps(ts: TS<U, D>, p: Proof) {
     when (p) {
       is SatProof -> sAlphasOut.add(ts to p)
       is ViolationProof -> vAlphasOut.add(ts to p)
@@ -69,24 +79,24 @@ class Oaux(
     }
   }
 
-  private fun shiftOaux(interval: BoundedInterval, iStart: Double, ts: TS, tp: TP) {
+  private fun shiftOaux(interval: RealInterval<U, D>, iStart: D?, ts: TS<U, D>, tp: TP) {
     shiftTsTpsPast(interval, iStart, ts, tp)
 
-    val newInSat = sAlphasOut.filter { (ts, _) -> interval.contains(ts.i) }
-    sAlphasOut.removeIf { (ts, _) -> ts.i <= interval.endVal }
+    val newInSat = sAlphasOut.filter { (ts, _) -> interval.contains(ts) }
+    sAlphasOut.removeIf { (ts, _) -> ts <= interval.endVal }
     if (newInSat.isNotEmpty()) {
       sAlphasIn.addAll(newInSat)
       sAlphasIn.sortBy { it.second.size() }
     }
 
-    val newInVio = vAlphasOut.filter { (ts, _) -> interval.contains(ts.i) }
-    vAlphasOut.removeIf { (ts, _) -> ts.i <= interval.endVal }
+    val newInVio = vAlphasOut.filter { (ts, _) -> interval.contains(ts) }
+    vAlphasOut.removeIf { (ts, _) -> ts <= interval.endVal }
     vAlphasIn.addAll(newInVio)
 
-    sAlphasIn.removeIf { (tsL, _) -> tsL.i < interval.startVal }
-    sAlphasOut.removeIf { (tsL, _) -> tsL.i <= interval.endVal }
-    vAlphasIn.removeIf { (tsL, _) -> tsL.i < interval.startVal }
-    vAlphasOut.removeIf { (tsL, _) -> tsL.i <= interval.endVal }
+    sAlphasIn.removeIf { (tsL, _) -> tsL < interval.startVal }
+    sAlphasOut.removeIf { (tsL, _) -> tsL <= interval.endVal }
+    vAlphasIn.removeIf { (tsL, _) -> tsL < interval.startVal }
+    vAlphasOut.removeIf { (tsL, _) -> tsL <= interval.endVal }
   }
 
   private fun evalOaux(tp: TP): Proof {

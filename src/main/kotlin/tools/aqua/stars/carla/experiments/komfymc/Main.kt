@@ -17,20 +17,20 @@
 
 package tools.aqua.stars.carla.experiments.komfymc
 
-import tools.aqua.dsl.Formula
+import tools.aqua.stars.carla.experiments.komfymc.dsl.Formula
 import tools.aqua.stars.carla.experiments.komfymc.dsl.Ref
 import tools.aqua.stars.core.types.*
 
-fun <E : EntityType<E, T, S>, T : TickDataType<E, T, S>, S : SegmentType<E, T, S>> eval(
-    entities: S,
-    formula: Formula
-): List<Proof> {
+fun <
+    E : EntityType<E, T, S, U, D>,
+    T : TickDataType<E, T, S, U, D>,
+    S : SegmentType<E, T, S, U, D>,
+    U : TickUnit<U, D>,
+    D : TickDifference<D>> eval(entities: S, formula: Formula): List<Proof> {
   val result = mutableMapOf<Int, Pdt<Proof>>()
-  val mEval = MEval()
-  MEval.maxTick = entities.ticks.keys.max()
-  val state = mEval.init(formula)
+  val state = MEval(TS(entities.ticks.keys.last())).init(formula)
   Ref.cycle(entities) { idx, t ->
-    val p = mEval.eval(TS(t), TP(idx), mutableListOf(), state)
+    val p = state.eval(TS(t), TP(idx), mutableListOf())
     p.forEach { result[at(it).i] = it }
   }
   return result.values.mapNotNull { if (it is Leaf) it.value else null }

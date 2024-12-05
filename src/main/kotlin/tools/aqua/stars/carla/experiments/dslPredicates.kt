@@ -17,18 +17,22 @@
 
 package tools.aqua.stars.carla.experiments
 
+import tools.aqua.stars.carla.experiments.komfymc.dsl.Bind
 import kotlin.math.abs
 import kotlin.math.sign
-import tools.aqua.dsl.FormulaBuilder.Companion.formula
+import tools.aqua.stars.carla.experiments.komfymc.dsl.FormulaBuilder.Companion.formula
 import tools.aqua.stars.carla.experiments.komfymc.dsl.Ref
+import tools.aqua.stars.core.evaluation.UnaryPredicate.Companion.predicate
 import tools.aqua.stars.data.av.dataclasses.*
+import tools.aqua.stars.logic.kcmftbl.eventually
+import tools.aqua.stars.logic.kcmftbl.next
 
 val hasMidTrafficDensityDSL = formula { v: Ref<Vehicle> ->
-  minPrevalence(0.6) { pred(v) { it.tickData.vehiclesInBlock(it.lane.road.block).size in 6..15 } }
+  minPrevalence(0.6) { pred(v) { v -> v.tickData.vehiclesInBlock(v.lane.road.block).size in 6..15 } }
 }
 
 val hasHighTrafficDensityDSL = formula { v: Ref<Vehicle> ->
-  minPrevalence(0.6) { pred(v) { it.tickData.vehiclesInBlock(it.lane.road.block).size > 15 } }
+  minPrevalence(0.6) { pred(v) { v -> v.tickData.vehiclesInBlock(v.lane.road.block).size > 15 } }
 }
 
 val hasLowTrafficDensityDSL = formula { v: Ref<Vehicle> ->
@@ -36,12 +40,10 @@ val hasLowTrafficDensityDSL = formula { v: Ref<Vehicle> ->
 }
 
 val changedLaneDSL = formula { v: Ref<Vehicle> ->
-  binding(term(v) { v -> v.lane }) { l -> eventually { pred(v) { v -> l.with(v) != v.lane } } }
-}
-
-val notChangedLaneDSL = formula { v: Ref<Vehicle> ->
-  neg {
-    binding(term(v) { v -> v.lane }) { l -> eventually { pred(v) { v -> l.with(v) != v.lane } } }
+  binding(term(v) { v -> v.lane }) { l: Bind<Vehicle, Lane> ->
+      eventually {
+        pred(v) { v -> l.with(v).road == v.lane.road } and pred(v) { v -> l.with(v) != v.lane }
+      }
   }
 }
 
@@ -53,7 +55,7 @@ val oncomingDSL = formula { v1: Ref<Vehicle> ->
   exists { v2: Ref<Vehicle> ->
     eventually {
       onSameRoadDSL.holds(v1, v2) and
-          pred(v1, v2) { fst, snd -> fst.lane.laneId.sign == snd.lane.laneId.sign }
+          pred(v1, v2) { fst, snd -> fst.lane.laneId.sign != snd.lane.laneId.sign }
     }
   }
 }
@@ -62,7 +64,7 @@ val isInJunctionDSL = formula { v: Ref<Vehicle> ->
   minPrevalence(0.8) { pred(v) { it.lane.road.isJunction } }
 }
 
-val isInSingleLaneDSL = formula { v: Ref<Vehicle> ->
+val isOnSingleLaneDSL = formula { v: Ref<Vehicle> ->
   neg { isInJunctionDSL.holds(v) } and
       minPrevalence(0.8) {
         pred(v) { predV ->
@@ -70,8 +72,8 @@ val isInSingleLaneDSL = formula { v: Ref<Vehicle> ->
         }
       }
 }
-val isInMultiLaneDSL = formula { v: Ref<Vehicle> ->
-  neg { isInJunctionDSL.holds(v) or isInSingleLaneDSL.holds(v) }
+val isOnMultiLaneDSL = formula { v: Ref<Vehicle> ->
+  neg { isInJunctionDSL.holds(v) or isOnSingleLaneDSL.holds(v) }
 }
 
 val sunsetDSL = formula { v: Ref<Vehicle> ->
@@ -106,7 +108,7 @@ val weatherHardRainDSL = formula { v: Ref<Vehicle> ->
 }
 
 // used in behind
-val soBetweenDSL = formula { ego: Ref<Vehicle>, v1: Ref<Vehicle> ->
+/*val soBetweenDSL = formula { ego: Ref<Vehicle>, v1: Ref<Vehicle> ->
   exists { v2: Ref<Vehicle> ->
     (pred(ego, v2) { ego, v2 -> ego.id != v2.id } or pred(v1, v2) { v1, v2 -> v1.id != v2.id }) and
         (pred(ego, v2) { ego, v2 -> ego.lane.uid == v2.lane.uid } or
@@ -116,19 +118,34 @@ val soBetweenDSL = formula { ego: Ref<Vehicle>, v1: Ref<Vehicle> ->
         (pred(v1, v2) { v1, v2 -> v1.lane.uid != v2.lane.uid } or
             pred(v1, v2) { v1, v2 -> v1.positionOnLane > v2.positionOnLane })
   }
+}*/
+val soBetweenDSL = formula { ego: Ref<Vehicle>, v1: Ref<Vehicle> ->
+  pred(ego, v1) { ego, v1 ->
+    v1.tickData.vehicles
+      .filter { it.id != ego.id && it.id != v1.id }
+      .any { vx ->
+        (ego.lane.uid == vx.lane.uid || v1.lane.uid == vx.lane.uid) &&
+                (!(ego.lane.uid == vx.lane.uid) || (ego.positionOnLane < vx.positionOnLane)) &&
+                (!(v1.lane.uid == vx.lane.uid) || (v1.positionOnLane > vx.positionOnLane))
+      }
+  }
 }
 
 val behindDSL = formula { v1: Ref<Vehicle>, v2: Ref<Vehicle> ->
-  (pred(v1, v2) { v1, v2 -> v1.lane.uid == v2.lane.uid } and
+  ((pred(v1, v2) { v1, v2 -> v1.lane.uid == v2.lane.uid } and
       pred(v1, v2) { v1, v2 -> v1.positionOnLane < v2.positionOnLane }) or
-      (pred(v1, v2) { v1, v2 -> v1.lane.successorLanes.any { it.lane.uid == v2.lane.uid } } and
-          (neg { soBetweenDSL.holds(v1, v2) }))
+      pred(v1, v2) { v1, v2 -> v1.lane.successorLanes.any { it.lane.uid == v2.lane.uid } }) and
+          (neg { soBetweenDSL.holds(v1, v2) })
 }
 
 val followsDSL = formula { ego: Ref<Vehicle> ->
   exists { v1: Ref<Vehicle> ->
     eventually {
-      globally(0.0 to 30.0) { behindDSL.holds(ego, v1) } and eventually(30.0 to 31.0) { tt() }
+      globally(TickDataDifferenceSeconds(0.0) to TickDataDifferenceSeconds(30.0)) {
+        behindDSL.holds(ego, v1)
+      } and eventually(TickDataDifferenceSeconds(30.0) to TickDataDifferenceSeconds(31.0)) {
+        tt()
+      }
     }
   }
 }
@@ -174,7 +191,7 @@ val overtakingDSL = formula { r1: Ref<Vehicle>, r2: Ref<Vehicle> ->
                 next {
                   until {
                     besidesDSL.holds(r1, r2) and bothOver10MphDSL.holds(r1, r2)
-                    isBehindDSL.holds(r1, r2) and bothOver10MphDSL.holds(r1, r2)
+                    isBehindDSL.holds(r2, r1) and bothOver10MphDSL.holds(r1, r2)
                   }
                 }
           }
@@ -251,7 +268,16 @@ val hasRedLightDSL = formula { v: Ref<Vehicle> ->
 val hasRelevantRedLightDSL = formula { v: Ref<Vehicle> ->
   eventually { hasRedLightDSL.holds(v) and isAtEndOfRoadDSL.holds(v) }
 }
-
+val didCrossRedLightDSL =
+  formula { v: Ref<Vehicle> ->
+    eventually {
+      hasRelevantRedLightDSL.holds(v) and
+              binding(term(v) { v -> v.lane.road }) { b ->
+                next {
+                  pred(v) { v -> b.with(v) != v.lane.road } }
+              }
+    }
+  }
 val didNotCrossRedLightDSL = formula { v: Ref<Vehicle> ->
   globally {
     hasRelevantRedLightDSL.holds(v) impl

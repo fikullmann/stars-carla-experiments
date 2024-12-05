@@ -16,7 +16,7 @@
  */
 
 package tools.aqua.stars.carla.experiments.komfymc
-
+/*
 import tools.aqua.auxStructures.*
 import tools.aqua.stars.carla.experiments.komfymc.dsl.Bind
 import tools.aqua.stars.carla.experiments.komfymc.dsl.Ref
@@ -276,3 +276,6 @@ class Buf2TIterator(val self: Buf2T) : Iterator<Triple<Pair<Pdt<Proof>, Pdt<Proo
 
   override fun next(): Triple<Pair<Pdt<Proof>, Pdt<Proof>>, TS, TP> = self.take()
 }
+
+
+ */

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package tools.aqua.dsl
+package tools.aqua.stars.carla.experiments.komfymc.dsl
 
 data class Leq<Type>(val lhs: Term<Type>, val rhs: Term<Type>) : Formula
 

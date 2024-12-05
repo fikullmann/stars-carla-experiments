@@ -17,16 +17,23 @@
 
 package tools.aqua.stars.carla.experiments.komfymc
 
+import tools.aqua.stars.core.types.TickDifference
+import tools.aqua.stars.core.types.TickUnit
+
 /** Timestamp */
 @JvmInline
-value class TS(val i: Double) : Comparable<TS> {
-  override fun compareTo(other: TS) = i.compareTo(other.i)
+value class TS<U : TickUnit<U, D>, D : TickDifference<D>>(val i: U) : Comparable<TS<U, D>> {
+  override fun compareTo(other: TS<U, D>) = i.compareTo(other.i)
 
-  operator fun plus(other: Double) = TS(i + other)
+//  operator fun plus(other: D) = TS(i + other)
 
-  operator fun minus(other: Double) = TS(i - other)
+//  operator fun minus(other: D) = TS(i - other)
 
-  operator fun minus(other: TS) = TS(i - other.i)
+  operator fun plus(other: D?) = if (other != null) TS(i + other) else this
+
+  operator fun minus(other: D?) = if (other != null) TS(i - other) else this
+
+  // operator fun minus(other: TS<U, D>) = TS<U, D>(i - other.i)
 }
 
 /** Timepoint */
@@ -41,30 +48,29 @@ value class TP(val i: Int) : Comparable<TP> {
   operator fun minus(other: Int) = TP(i - other)
 }
 
-abstract class Interval(open val startVal: Double = 0.0) {
+class RelativeInterval<D : TickDifference<D>>(val startVal: D? = null, val endVal: D? = null) {
   /** returns true when t is inside the Interval */
-  abstract fun contains(t: Double): Boolean
+  fun contains(t: D) =
+      if (startVal != null) {
+        if (endVal != null) t in startVal..endVal else t <= startVal
+      } else {
+        if (endVal != null) (t <= endVal) else true
+      }
 
   /** returns true when Timepoint t is before the Interval */
-  abstract fun below(t: Double): Boolean
+  fun below(t: D) = startVal?.let { t < startVal } ?: false
 
   /** returns true when Timepoint t is after the Interval */
-  abstract fun above(t: Double): Boolean
+  fun above(t: D) = endVal?.let { t > endVal } ?: false
 }
 
-data class InfInterval(override val startVal: Double = 0.0) : Interval() {
-  override fun contains(t: Double) = (t >= startVal)
+data class RealInterval<U : TickUnit<U, D>, D : TickDifference<D>>(
+    val startVal: TS<U, D>,
+    val endVal: TS<U, D>
+) {
+  fun contains(t: TS<U, D>) = t in startVal..endVal
 
-  override fun below(t: Double) = t < startVal
+  fun below(t: TS<U, D>) = t < startVal
 
-  override fun above(t: Double) = false
-}
-
-data class BoundedInterval(override val startVal: Double = 0.0, val endVal: Double = 0.0) :
-    Interval() {
-  override fun contains(t: Double) = (t in startVal..endVal)
-
-  override fun below(t: Double) = t < startVal
-
-  override fun above(t: Double) = t > endVal
+  fun above(t: TS<U, D>) = t > endVal
 }

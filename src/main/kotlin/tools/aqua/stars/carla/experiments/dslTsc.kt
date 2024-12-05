@@ -17,223 +17,242 @@
 
 package tools.aqua.stars.carla.experiments
 
-import tools.aqua.dsl.FormulaBuilder
-import tools.aqua.dsl.holds
-import tools.aqua.stars.carla.experiments.komfymc.SatProof
-import tools.aqua.stars.carla.experiments.komfymc.dsl.Ref
-import tools.aqua.stars.carla.experiments.komfymc.eval
+import tools.aqua.stars.carla.experiments.komfymc.holds
 import tools.aqua.stars.core.evaluation.PredicateContext
-import tools.aqua.stars.core.tsc.TSC
 import tools.aqua.stars.core.tsc.builder.*
-import tools.aqua.stars.core.tsc.projection.proj
-import tools.aqua.stars.core.tsc.projection.projRec
-import tools.aqua.stars.core.types.EntityType
-import tools.aqua.stars.core.types.SegmentType
-import tools.aqua.stars.core.types.TickDataType
-import tools.aqua.stars.data.av.dataclasses.Actor
-import tools.aqua.stars.data.av.dataclasses.Segment
-import tools.aqua.stars.data.av.dataclasses.TickData
-import tools.aqua.stars.data.av.dataclasses.Vehicle
+import tools.aqua.stars.data.av.dataclasses.*
 
-fun <E : EntityType<E, T, S>, T : TickDataType<E, T, S>, S : SegmentType<E, T, S>> toCond(
-    predicate: (Ref<Vehicle>) -> FormulaBuilder
-): ((PredicateContext<E, T, S>) -> Boolean) {
-  return { ctx: PredicateContext<E, T, S> ->
-    val predicateHolds = predicate.holds(Ref(ctx.primaryEntityId))
-    eval(ctx.segment, predicateHolds).firstOrNull()?.let { firstProof -> firstProof is SatProof }
-        ?: predicateHolds.let { true }.apply { throw Exception() }
-  }
-}
 
-fun <E : EntityType<E, T, S>, T : TickDataType<E, T, S>, S : SegmentType<E, T, S>> toCondTest(
-    predicate: (Ref<Vehicle>) -> FormulaBuilder
-): (PredicateContext<E, T, S>) -> Boolean {
-  return { ctx: PredicateContext<E, T, S> ->
-    val formula = predicate.holds(Ref(ctx.primaryEntityId))
-    eval(ctx.segment, formula).firstOrNull()?.let { asdf ->
-      if (asdf is SatProof) {
-        true
-      } else {
-        false
-      }
-    }!!
-  }
-}
-
-fun dslTest() =
-    TSC(
-        root<Actor, TickData, Segment> {
-          all("TSCRoot") {
-            valueFunction = { "TSCRoot" }
-            projectionIDs =
-                mapOf(
-                    projRec("all"),
-                    proj("static"),
-                    proj("dynamic"),
-                    proj("static+dynamic"),
-                    proj("environment"),
-                    proj("pedestrian"),
-                    proj("multi-lane-dynamic-relations"))
-            bounded("Stop Type", Pair(0, 1)) {
-              projectionIDs = mapOf(projRec("static"), projRec("static+dynamic"))
-              leaf("Has Red Light") {
-                condition = toCond(hasRelevantRedLightDSL)
-                monitorFunction = toCond(didNotCrossRedLightDSL)
-              }
-            }
-            leaf("Has Red Light") {
-              condition = toCond(hasRelevantRedLightDSL)
-              monitorFunction = toCond(didNotCrossRedLightDSL)
-            }
-          }
-        })
+private const val FULL_TSC = "full TSC"
+private const val LAYER_1_2 = "layer 1+2"
+private const val LAYER_4 = "layer 4"
+private const val LAYER_1_2_4 = "layer 1+2+4"
+private const val LAYER_4_5 = "layer (4)+5"
+private const val LAYER_PEDESTRIAN = "pedestrian"
+private const val LAYER_MULTI_LANE_DYNAMIC_RELATIONS = "multi-lane-dynamic-relations"
 
 fun dslTsc() =
-    TSC(
-        root<Actor, TickData, Segment> {
-          all("TSCRoot") {
-            valueFunction = { "TSCRoot" }
-            projectionIDs =
-                mapOf(
-                    projRec("all"),
-                    proj("static"),
-                    proj("dynamic"),
-                    proj("static+dynamic"),
-                    proj("environment"),
-                    proj("pedestrian"),
-                    proj("multi-lane-dynamic-relations"))
+    tsc<Actor, TickData, Segment, TickDataUnitSeconds, TickDataDifferenceSeconds> {
+        all("TSCRoot") {
+            projections {
+                projectionRecursive(FULL_TSC) // all
+                projection(LAYER_1_2) // static
+                projection(LAYER_4) // dynamic
+                projection(LAYER_1_2_4) // static + dynamic
+                projection(LAYER_4_5) // environment
+                projection(LAYER_PEDESTRIAN) // pedestrian
+                projection(LAYER_MULTI_LANE_DYNAMIC_RELATIONS)
+            }
+
             exclusive("Weather") {
-              projectionIDs = mapOf(projRec("environment"), projRec("pedestrian"))
-              leaf("Clear") { condition = toCond(weatherClearDSL) }
-              leaf("Cloudy") { condition = toCond(weatherCloudyDSL) }
-              leaf("Wet") { condition = toCond(weatherWetDSL) }
-              leaf("Wet Cloudy") { condition = toCond(weatherWetCloudyDSL) }
-              leaf("Soft Rain") { condition = toCond(weatherSoftRainDSL) }
-              leaf("Mid Rain") { condition = toCond(weatherMidRainDSL) }
-              leaf("Hard Rain") { condition = toCond(weatherHardRainDSL) }
+                projections {
+                    projectionRecursive(LAYER_4_5)
+                    projectionRecursive(LAYER_PEDESTRIAN)
+                }
+
+                leaf("Clear") { condition { ctx -> weatherClearDSL.holds(ctx) } }
+                leaf("Cloudy") { condition { ctx -> weatherCloudyDSL.holds(ctx) } }
+                leaf("Wet") { condition { ctx -> weatherWetDSL.holds(ctx) } }
+                leaf("Wet Cloudy") { condition { ctx -> weatherWetCloudyDSL.holds(ctx) } }
+                leaf("Soft Rain") { condition { ctx -> weatherSoftRainDSL.holds(ctx) } }
+                leaf("Mid Rain") { condition { ctx -> weatherMidRainDSL.holds(ctx) } }
+                leaf("Hard Rain") { condition { ctx -> weatherHardRainDSL.holds(ctx) } }
             }
+
             exclusive("Road Type") {
-              projectionIDs =
-                  mapOf(
-                      proj("static"),
-                      proj("dynamic"),
-                      proj("static+dynamic"),
-                      proj("pedestrian"),
-                      proj("multi-lane-dynamic-relations"))
-              all("Junction") {
-                condition = toCond(isInJunctionDSL)
-                projectionIDs =
-                    mapOf(
-                        proj("pedestrian"), proj("static"), proj("dynamic"), proj("static+dynamic"))
-                optional("Dynamic Relation") {
-                  projectionIDs =
-                      mapOf(proj("pedestrian"), projRec("dynamic"), projRec("static+dynamic"))
-                  leaf("Pedestrian Crossed") {
-                    projectionIDs = mapOf(proj("pedestrian"))
-                    condition = toCond(pedestrianCrossedDSL)
-                  }
-                  leaf("Must Yield") {
-                    condition = toCond(mustYieldDSL)
-                    monitorFunction = toCond(hasYieldedDSL)
-                  }
-                  leaf("Following Leading Vehicle") {
-                    projectionIDs = mapOf(proj("dynamic"))
-                    condition = toCond(followsDSL)
-                  }
+                projections {
+                    projection(LAYER_1_2)
+                    projection(LAYER_4)
+                    projection(LAYER_1_2_4)
+                    projection(LAYER_PEDESTRIAN)
+                    projection(LAYER_MULTI_LANE_DYNAMIC_RELATIONS)
                 }
-                exclusive("Maneuver") {
-                  projectionIDs = mapOf(projRec("static"), projRec("static+dynamic"))
-                  leaf("Lane Follow") { condition = toCond(makesNoTurnDSL) }
-                  leaf("Right Turn") { condition = toCond(makesRightTurnDSL) }
-                  leaf("Left Turn") { condition = toCond(makesLeftTurnDSL) }
+
+                all("Junction") {
+                    condition { ctx -> isInJunctionDSL.holds(ctx) }
+
+                    projections {
+                        projection(LAYER_PEDESTRIAN)
+                        projection(LAYER_1_2)
+                        projection(LAYER_4)
+                        projection(LAYER_1_2_4)
+                    }
+
+                    optional("Dynamic Relation") {
+                        projections {
+                            projection(LAYER_PEDESTRIAN)
+                            projectionRecursive(LAYER_4)
+                            projectionRecursive(LAYER_1_2_4)
+                        }
+
+                        leaf("Pedestrian Crossed") {
+                            projections { projection(LAYER_PEDESTRIAN) }
+
+                            condition { ctx -> pedestrianCrossedDSL.holds(ctx) }
+                        }
+
+                        leaf("Must Yield") {
+
+                            condition { ctx -> mustYieldDSL.holds(ctx) }
+
+                            monitors {
+                                monitor("Did not yield") { ctx -> hasYieldedDSL.holds(ctx) }
+                            }
+                        }
+
+                        leaf("Following Leading Vehicle") {
+                            projections { projection(LAYER_4) }
+                            condition { ctx -> followsDSL.holds(ctx) }
+                        }
+                    }
+
+                    exclusive("Maneuver") {
+                        projections {
+                            projectionRecursive(LAYER_1_2)
+                            projectionRecursive(LAYER_1_2_4)
+                        }
+
+                        leaf("Lane Follow") { condition { ctx -> makesNoTurnDSL.holds(ctx) } }
+                        leaf("Right Turn") { condition { ctx -> makesRightTurnDSL.holds(ctx) } }
+                        leaf("Left Turn") { condition { ctx -> makesLeftTurnDSL.holds(ctx) } }
+                    }
                 }
-              }
-              all("Multi-Lane") {
-                condition = toCond(isInMultiLaneDSL)
-                projectionIDs =
-                    mapOf(
-                        proj("pedestrian"),
-                        proj("static"),
-                        proj("dynamic"),
-                        proj("static+dynamic"),
-                        proj("multi-lane-dynamic-relations"))
-                optional("Dynamic Relation") {
-                  projectionIDs =
-                      mapOf(
-                          proj("pedestrian"),
-                          projRec("dynamic"),
-                          projRec("static+dynamic"),
-                          projRec("multi-lane-dynamic-relations"))
-                  leaf("Oncoming traffic") { condition = toCond(oncomingDSL) }
-                  leaf("Overtaking") {
-                    condition = toCond(hasOvertakenDSL)
-                    monitorFunction = toCond(noRightOvertakingDSL)
-                  }
-                  leaf("Pedestrian Crossed") {
-                    projectionIDs = mapOf(proj("pedestrian"))
-                    condition = toCond(pedestrianCrossedDSL)
-                  }
-                  leaf("Following Leading Vehicle") {
-                    projectionIDs = mapOf(proj("dynamic"))
-                    condition = toCond(followsDSL)
-                  }
+                all("Multi-Lane") {
+                    projections {
+                        projection(LAYER_PEDESTRIAN)
+                        projection(LAYER_1_2)
+                        projection(LAYER_4)
+                        projection(LAYER_1_2_4)
+                        projection(LAYER_MULTI_LANE_DYNAMIC_RELATIONS)
+                    }
+
+                    condition { ctx -> isOnMultiLaneDSL.holds(ctx) }
+
+                    optional("Dynamic Relation") {
+                        projections {
+                            projection(LAYER_PEDESTRIAN)
+                            projectionRecursive(LAYER_4)
+                            projectionRecursive(LAYER_1_2_4)
+                            projectionRecursive(LAYER_MULTI_LANE_DYNAMIC_RELATIONS)
+                        }
+                        leaf("Oncoming traffic") {
+                            condition { ctx -> oncomingDSL.holds(ctx) }
+                        }
+                        leaf("Overtaking") {
+                            condition { ctx -> hasOvertakenDSL.holds(ctx) }
+                            monitors { monitor("Right Overtaking") { ctx -> noRightOvertakingDSL.holds(ctx) } }
+                        }
+                        leaf("Pedestrian Crossed") {
+                            projections { projection(LAYER_PEDESTRIAN) }
+
+                            condition { ctx -> pedestrianCrossedDSL.holds(ctx) }
+                        }
+                        leaf("Following Leading Vehicle") {
+                            projections { projection(LAYER_4) }
+
+                            condition { ctx -> followsDSL.holds(ctx) }
+                        }
+                    }
+
+                    exclusive("Maneuver") {
+                        projections {
+                            projectionRecursive(LAYER_1_2)
+                            projectionRecursive(LAYER_1_2_4)
+                        }
+                        leaf("Lane Change") { condition { ctx -> changedLaneDSL.holds(ctx) } }
+                        leaf("Lane Follow") { condition { ctx -> !changedLaneDSL.holds(ctx) } }
+                    }
+
+                    bounded("Stop Type", Pair(0, 1)) {
+                        projections {
+                            projectionRecursive(LAYER_1_2)
+                            projectionRecursive(LAYER_1_2_4)
+                        }
+
+                        leaf("Has Red Light") {
+                            condition { ctx -> hasRelevantRedLightDSL.holds(ctx) }
+                            monitors { monitor("Crossed red light") { ctx -> !didCrossRedLightDSL.holds(ctx) } }
+                        }
+                    }
                 }
-                exclusive("Maneuver") {
-                  projectionIDs = mapOf(projRec("static"), projRec("static+dynamic"))
-                  leaf("Lane Change") { condition = toCond(changedLaneDSL) }
-                  leaf("Lane Follow") { condition = toCond(notChangedLaneDSL) }
+                all("Single-Lane") {
+                    projections {
+                        projection(LAYER_PEDESTRIAN)
+                        projection(LAYER_1_2)
+                        projection(LAYER_4)
+                        projection(LAYER_1_2_4)
+                    }
+
+                    condition { ctx -> isOnSingleLaneDSL.holds(ctx) }
+
+                    optional("Dynamic Relation") {
+                        projections {
+                            projection(LAYER_PEDESTRIAN)
+                            projectionRecursive(LAYER_4)
+                            projectionRecursive(LAYER_1_2_4)
+                        }
+
+                        leaf("Oncoming traffic") {
+                            condition { ctx -> oncomingDSL.holds(ctx) }
+                        }
+
+                        leaf("Pedestrian Crossed") {
+                            projections { projection(LAYER_PEDESTRIAN) }
+
+                            condition { ctx -> pedestrianCrossedDSL.holds(ctx) }
+                        }
+
+                        leaf("Following Leading Vehicle") {
+                            projections {
+                                projection(LAYER_4)
+                                projection(LAYER_1_2_4)
+                            }
+
+                            condition { ctx -> followsDSL.holds(ctx) }
+                        }
+                    }
+
+                    bounded("Stop Type", Pair(0, 1)) {
+                        projections {
+                            projectionRecursive(LAYER_1_2)
+                            projectionRecursive(LAYER_1_2_4)
+                        }
+
+                        leaf("Has Stop Sign") {
+                            condition { ctx -> hasStopSignDSL.holds(ctx) }
+                            monitors { monitor("Stopped at stop sign") { ctx -> stopAtEndDSL.holds(ctx) } }
+                        }
+                        leaf("Has Yield Sign") { condition { ctx -> hasYieldSignDSL.holds(ctx) } }
+                        leaf("Has Red Light") {
+
+                            condition { ctx -> hasRelevantRedLightDSL.holds(ctx) }
+                            monitors { monitor("Crossed red light") { ctx -> !didCrossRedLightDSL.holds(ctx) } }
+                        }
+                    }
                 }
-                bounded("Stop Type", Pair(0, 1)) {
-                  projectionIDs = mapOf(projRec("static"), projRec("static+dynamic"))
-                  leaf("Has Red Light") {
-                    condition = toCond(hasRelevantRedLightDSL)
-                    monitorFunction = { ctx -> !didCrossRedLight.holds(ctx) }
-                  }
-                }
-              }
-              all("Single-Lane") {
-                condition = toCond(isInSingleLaneDSL)
-                projectionIDs =
-                    mapOf(
-                        proj("pedestrian"), proj("static"), proj("dynamic"), proj("static+dynamic"))
-                optional("Dynamic Relation") {
-                  projectionIDs =
-                      mapOf(proj("pedestrian"), projRec("dynamic"), projRec("static+dynamic"))
-                  leaf("Oncoming traffic") { condition = toCond(oncomingDSL) }
-                  leaf("Pedestrian Crossed") {
-                    projectionIDs = mapOf(proj("pedestrian"))
-                    condition = toCond(pedestrianCrossedDSL)
-                  }
-                  leaf("Following Leading Vehicle") {
-                    projectionIDs = mapOf(proj("dynamic"), proj("static+dynamic"))
-                    condition = toCond(followsDSL)
-                  }
-                }
-                bounded("Stop Type", Pair(0, 1)) {
-                  projectionIDs = mapOf(projRec("static"), projRec("static+dynamic"))
-                  leaf("Has Stop Sign") {
-                    condition = toCond(hasStopSignDSL)
-                    monitorFunction = toCond(stopAtEndDSL)
-                  }
-                  leaf("Has Yield Sign") { condition = toCond(hasYieldSignDSL) }
-                  leaf("Has Red Light") {
-                    condition = toCond(hasRelevantRedLightDSL)
-                    monitorFunction = { ctx -> !didCrossRedLight.holds(ctx) }
-                  }
-                }
-              }
             }
+
             exclusive("Traffic Density") {
-              projectionIDs =
-                  mapOf(projRec("environment"), projRec("dynamic"), projRec("static+dynamic"))
-              leaf("High Traffic") { condition = toCond(hasHighTrafficDensityDSL) }
-              leaf("Middle Traffic") { condition = toCond(hasMidTrafficDensityDSL) }
-              leaf("Low Traffic") { condition = toCond(hasLowTrafficDensityDSL) }
+                projections {
+                    projectionRecursive(LAYER_4_5)
+                    projectionRecursive(LAYER_4)
+                    projectionRecursive(LAYER_1_2_4)
+                }
+
+                leaf("High Traffic") { condition { ctx -> hasHighTrafficDensityDSL.holds(ctx) } }
+                leaf("Middle Traffic") { condition { ctx -> hasMidTrafficDensityDSL.holds(ctx) } }
+                leaf("Low Traffic") { condition { ctx -> hasLowTrafficDensityDSL.holds(ctx) } }
             }
+
             exclusive("Time of Day") {
-              projectionIDs = mapOf(projRec("environment"), projRec("pedestrian"))
-              leaf("Sunset") { condition = toCond(sunsetDSL) }
-              leaf("Noon") { condition = toCond(noonDSL) }
+                projections {
+                    projectionRecursive(LAYER_4_5)
+                    projectionRecursive(LAYER_PEDESTRIAN)
+                }
+
+                leaf("Sunset") { condition { ctx -> sunsetDSL.holds(ctx) } }
+
+                leaf("Noon") { condition { ctx -> noonDSL.holds(ctx) } }
             }
-          }
-        })
+        }
+    }

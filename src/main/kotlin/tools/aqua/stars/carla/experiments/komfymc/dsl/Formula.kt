@@ -15,10 +15,8 @@
  * limitations under the License.
  */
 
-package tools.aqua.dsl
+package tools.aqua.stars.carla.experiments.komfymc.dsl
 
-import tools.aqua.stars.carla.experiments.komfymc.dsl.Bind
-import tools.aqua.stars.carla.experiments.komfymc.dsl.Ref
 import tools.aqua.stars.core.types.*
 
 sealed interface Formula
@@ -27,14 +25,23 @@ data object TT : Formula
 
 data object FF : Formula
 
-data class UnaryPredicate<E1 : EntityType<*, *, *>>(val ref: Ref<E1>, val phi: (E1) -> Boolean) :
-    Formula
+data class UnaryPredicate<E1 : EntityType<*, *, *, *, *>>(
+    val ref: Ref<E1>,
+    val phi: (E1) -> Boolean
+) : Formula
 
-data class BinaryPredicate<E1 : EntityType<*, *, *>, E2 : EntityType<*, *, *>>(
+data class BinaryPredicate<E1 : EntityType<*, *, *, *, *>, E2 : EntityType<*, *, *, *, *>>(
     val ref1: Ref<E1>,
     val ref2: Ref<E2>,
     val phi: (E1, E2) -> Boolean
 ) : Formula
+
+data class UnBindPred<E1 : EntityType<*, *, *, *, *>, Type: Any>(
+    val ref: Ref<E1>,
+    val bindVariable: Bind<out EntityType<*, *, *, *, *>, Type>,
+    val phi: (E1, Type) -> Boolean
+) : Formula
+
 
 data class Neg(val inner: Formula) : Formula
 
@@ -46,54 +53,68 @@ data class Implication(val lhs: Formula, val rhs: Formula) : Formula
 
 data class Iff(val lhs: Formula, val rhs: Formula) : Formula
 
-data class Prev(val interval: Pair<Double, Double>? = null, val inner: Formula) : Formula
-
-data class Next(val interval: Pair<Double, Double>? = null, val inner: Formula) : Formula
-
-data class Once(val interval: Pair<Double, Double>? = null, val inner: Formula) : Formula
-
-data class Historically(val interval: Pair<Double, Double>? = null, val inner: Formula) : Formula
-
-data class Eventually(val interval: Pair<Double, Double?>? = null, val inner: Formula) : Formula
-
-data class Always(val interval: Pair<Double, Double>? = null, val inner: Formula) : Formula
-
-data class Since(val interval: Pair<Double, Double>? = null, val lhs: Formula, val rhs: Formula) :
+data class Prev<D : TickDifference<D>>(val interval: Pair<D, D>? = null, val inner: Formula) :
     Formula
 
-data class Until(val interval: Pair<Double, Double>? = null, val lhs: Formula, val rhs: Formula) :
+data class Next<D : TickDifference<D>>(val interval: Pair<D, D>? = null, val inner: Formula) :
     Formula
 
-data class Forall<E : EntityType<*, *, *>>(val ref: Ref<E>, val inner: Formula) : Formula
+data class Once<D : TickDifference<D>>(val interval: Pair<D, D>? = null, val inner: Formula) :
+    Formula
 
-data class Exists<E : EntityType<*, *, *>>(val ref: Ref<E>, val inner: Formula) : Formula
+data class Historically<D : TickDifference<D>>(
+    val interval: Pair<D, D>? = null,
+    val inner: Formula
+) : Formula
 
-data class MinPrevalence(
-    val interval: Pair<Double, Double>? = null,
+data class Eventually<D : TickDifference<D>>(val interval: Pair<D, D>? = null, val inner: Formula) :
+    Formula
+
+data class Always<D : TickDifference<D>>(val interval: Pair<D, D>? = null, val inner: Formula) :
+    Formula
+
+data class Since<D : TickDifference<D>>(
+    val interval: Pair<D, D>? = null,
+    val lhs: Formula,
+    val rhs: Formula
+) : Formula
+
+data class Until<D : TickDifference<D>>(
+    val interval: Pair<D, D>? = null,
+    val lhs: Formula,
+    val rhs: Formula
+) : Formula
+
+data class Forall(val ref: Ref<out EntityType<*, *, *, *, *>>, val inner: Formula) : Formula
+
+data class Exists(val ref: Ref<out EntityType<*, *, *, *, *>>, val inner: Formula) : Formula
+
+data class MinPrevalence<D : TickDifference<*>>(
+    val interval: Pair<D, D>? = null,
     val fraction: Double,
     val inner: Formula
 ) : Formula
 
-data class PastMinPrevalence(
-    val interval: Pair<Double, Double>? = null,
+data class PastMinPrevalence<D : TickDifference<*>>(
+    val interval: Pair<D, D>? = null,
     val fraction: Double,
     val inner: Formula
 ) : Formula
 
-data class MaxPrevalence(
-    val interval: Pair<Double, Double>? = null,
+data class MaxPrevalence<D : TickDifference<*>>(
+    val interval: Pair<D, D>? = null,
     val fraction: Double,
     val inner: Formula
 ) : Formula
 
-data class PastMaxPrevalence(
-    val interval: Pair<Double, Double>? = null,
+data class PastMaxPrevalence<D : TickDifference<*>>(
+    val interval: Pair<D, D>? = null,
     val fraction: Double,
     val inner: Formula
 ) : Formula
 
-data class Binding<E1 : EntityType<*, *, *>, Type : Any>(
-    val bindVariable: Bind<E1, Type>,
+data class Binding<Type : Any>(
+    val bindVariable: Bind<out EntityType<*, *, *, *, *>, Type>,
     val inner: Formula
 ) : Formula
 
@@ -103,5 +124,7 @@ data class Constant<Type>(val value: Type) : Term<Type>
 
 data class Variable<Type>(val phi: () -> Type) : Term<Type>
 
-data class UnaryVariable<E1 : EntityType<*, *, *>, Type>(val ref: Ref<E1>, val phi: (E1) -> Type) :
-    Term<Type>
+data class UnaryVariable<E1 : EntityType<*, *, *, *, *>, Type>(
+    val ref: Ref<E1>,
+    val phi: (E1) -> Type
+) : Term<Type>

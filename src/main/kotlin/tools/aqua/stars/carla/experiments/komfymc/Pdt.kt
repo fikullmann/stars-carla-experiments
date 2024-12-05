@@ -26,24 +26,26 @@ import tools.aqua.stars.core.types.EntityType
 
 abstract class Pdt<Aux> {
   abstract fun <Result> apply1(
-      vars: MutableList<Ref<EntityType<*, *, *>>>,
+      vars: MutableList<Ref<EntityType<*, *, *, *, *>>>,
       f: (Aux) -> Result
   ): Pdt<Result>
 }
 
 class Leaf<Aux>(val value: Aux) : Pdt<Aux>() {
   override fun <Result> apply1(
-      vars: MutableList<Ref<EntityType<*, *, *>>>,
+      vars: MutableList<Ref<EntityType<*, *, *, *, *>>>,
       f: (Aux) -> Result
   ): Pdt<Result> {
     return Leaf(f(value))
   }
 }
 
-class Node<Aux>(val variable: Ref<out EntityType<*, *, *>>, val partition: Map<RefId, Pdt<Aux>>) :
-    Pdt<Aux>() {
+class Node<Aux>(
+    val variable: Ref<out EntityType<*, *, *, *, *>>,
+    val partition: Map<RefId, Pdt<Aux>>
+) : Pdt<Aux>() {
   override fun <Result> apply1(
-      vars: MutableList<Ref<EntityType<*, *, *>>>,
+      vars: MutableList<Ref<EntityType<*, *, *, *, *>>>,
       f: (Aux) -> Result
   ): Pdt<Result> {
     if (vars.isNotEmpty()) {
@@ -56,6 +58,23 @@ class Node<Aux>(val variable: Ref<out EntityType<*, *, *>>, val partition: Map<R
     }
     throw EmptyVariableReferences()
   }
+}
+class NodeL<Aux>(
+    val variable: Ref<out EntityType<*, *, *, *, *>>,
+    val partition: List<Pair<RefId, Pdt<Aux>>>
+) : Pdt<Aux>() {
+    override fun <Result> apply1(vars: MutableList<Ref<EntityType<*, *, *, *, *>>>, f: (Aux) -> Result): Pdt<Result> {
+        if (vars.isNotEmpty()) {
+            for (variable in vars) {
+                if (this.variable == variable) {
+                    return NodeL(variable, partition.map { it.first to it.second.apply1(vars, f) })
+                }
+            }
+            throw IncorrectVariableReferences()
+        }
+        throw EmptyVariableReferences()
+    }
+
 }
 
 fun at(pdt: Pdt<Proof>): TP {
@@ -80,6 +99,17 @@ fun <P, Aux> split(pdt: Pdt<Pair<P, Aux>>): Pair<Pdt<P>, Pdt<Aux>> {
       }
       return Node(pdt.variable, proofPartition) to Node(pdt.variable, auxPartition)
     }
+      is NodeL<Pair<P, Aux>> -> {
+          val proofPartition = mutableListOf<Pair<RefId, Pdt<P>>>()
+          val auxPartition = mutableListOf<Pair<RefId, Pdt<Aux>>>()
+          for (p in pdt.partition) {
+              split(p.second).let { (proof, aux) ->
+                  proofPartition.add(p.first to proof)
+                  auxPartition.add(p.first to aux)
+              }
+          }
+          return NodeL(pdt.variable, proofPartition) to NodeL(pdt.variable, auxPartition)
+      }
     else -> throw Exception()
   }
 }
@@ -99,12 +129,23 @@ fun <P> splitList(pdt: Pdt<MutableList<P>>): List<Pdt<P>> {
 
       return childPartition.map { Node(pdt.variable, partFst.zip(it).toMap()) }
     }
+      is NodeL -> {
+          val childPartition = mutableListOf<List<Pdt<P>>>()
+          val partSplitList = pdt.partition.map { it.first to splitList(it.second) }
+          val partFst = partSplitList.map { it.first }
+          val partSnd = partSplitList.map { it.second }
+          for (i in 0..<partSnd.first().size) {
+              childPartition.add(partSnd.map { it[i] })
+          }
+
+          return childPartition.map { NodeL(pdt.variable, partFst.zip(it)) }
+      }
     else -> throw Exception("Pdt can only be Node or Leaf, but somehow it was neither.")
   }
 }
 
 fun <P, Result> apply1(
-    vars: MutableList<Ref<EntityType<*, *, *>>>,
+    vars: MutableList<Ref<EntityType<*, *, *, *, *>>>,
     tree: Pdt<P>,
     f: (P) -> Result
 ): Pdt<Result> {
@@ -122,56 +163,57 @@ fun <P, Result> apply1(
 }
 
 fun <P, Aux, Result> apply2(
-    refs: MutableList<Ref<EntityType<*, *, *>>>,
+    refs: MutableList<Ref<EntityType<*, *, *, *, *>>>,
     pdt1: Pdt<P>,
     pdt2: Pdt<Aux>,
-    f: (P, Aux) -> Result
+    idx: Int = 0,
+    f: (P, Aux) -> Result,
 ): Pdt<Result> {
-  val vars = refs.toMutableList()
   return when {
     pdt1 is Leaf<P> && pdt2 is Leaf<Aux> -> Leaf(f(pdt1.value, pdt2.value))
     pdt1 is Leaf<P> && pdt2 is Node<Aux> ->
         Node(
             pdt2.variable,
             pdt2.partition.mapValues { (_, tree) ->
-              apply1(vars, tree, partial2First(f, pdt1.value))
+              apply1(refs, tree, partial2First(f, pdt1.value))
             })
     pdt1 is Node<P> && pdt2 is Leaf<Aux> ->
         Node(
             pdt1.variable,
             pdt1.partition.mapValues { (_, tree) ->
-              apply1(vars, tree, partial2Second(f, pdt2.value))
+              apply1(refs, tree, partial2Second(f, pdt2.value))
             })
-    vars.isNotEmpty() && pdt1 is Node<P> && pdt2 is Node<Aux> -> {
-      compareVariables(vars, pdt1, pdt2, f)
+    refs.isNotEmpty() && idx < refs.size && pdt1 is Node<P> && pdt2 is Node<Aux> -> {
+      compareVariables(refs, pdt1, pdt2, idx, f)
     }
     else -> throw EmptyVariableReferences()
   }
 }
 
 fun <P, Aux, Result> compareVariables(
-    vars: MutableList<Ref<EntityType<*, *, *>>>,
+    vars: MutableList<Ref<EntityType<*, *, *, *, *>>>,
     pdt1: Node<P>,
     pdt2: Node<Aux>,
-    f: (P, Aux) -> Result
+    i: Int = 0,
+    f: (P, Aux) -> Result,
 ): Pdt<Result> {
-  val variable = vars.removeFirst()
+  val variable = vars[i]
+  val idx = i+1
   return if (pdt1.variable == variable) {
     if (pdt2.variable == variable) {
       Node(
           variable,
           merge2(pdt1.partition, pdt2.partition).mapValues { (_, value) ->
-            apply2(vars, value.first, value.second, f)
+            apply2(vars, value.first, value.second, idx, f)
           })
     } else {
-
-      Node(variable, pdt1.partition.mapValues { (_, tree1) -> apply2(vars, tree1, pdt2, f) })
+      Node(variable, pdt1.partition.mapValues { (_, tree1) -> apply2(vars, tree1, pdt2, idx, f) })
     }
   } else {
     if (pdt2.variable == variable) {
-      Node(variable, pdt2.partition.mapValues { (_, tree2) -> apply2(vars, pdt1, tree2, f) })
+      Node(variable, pdt2.partition.mapValues { (_, tree2) -> apply2(vars, pdt1, tree2, idx, f) })
     } else {
-      apply2(vars, pdt1, pdt2, f)
+      apply2(vars, pdt1, pdt2, idx, f)
     }
   }
 }
@@ -185,6 +227,17 @@ fun <P1, P2> merge2(
     part2[refId1]?.let { pdt2 -> result[refId1] = pdt1 to pdt2 }
   }
   return result
+}
+fun <P1, P2> merge2( part1: List<Pair<RefId, Pdt<P1>>>, part2: List<Pair<RefId, Pdt<P2>>>): List<Triple<RefId, Pdt<P1>, Pdt<P2>>> {
+    val result = mutableListOf<Triple<RefId, Pdt<P1>, Pdt<P2>>>()
+    part1.mapNotNull { (refId1, pdt1 ) ->
+        part2.firstOrNull { (refId2, _) ->
+            refId1 == refId2
+        }?.let { (_, pdt2) ->
+            result.add(Triple(refId1, pdt1, pdt2))
+        }
+    }
+    return result
 }
 
 fun <P1, P3> merge3(
@@ -202,15 +255,26 @@ fun <P1, P3> merge3(
   }
   return result
 }
+fun <P1, P3> merge3(part1: List<Pair<RefId, Pdt<P1>>>, part2: List<Pair<RefId, Pdt<P1>>>, part3: List<Pair<RefId, Pdt<P3>>>): List<Pair<RefId, Triple<Pdt<P1>, Pdt<P1>, Pdt<P3>>>> {
+    val result = mutableListOf<Pair<RefId, Triple<Pdt<P1>, Pdt<P1>, Pdt<P3>>>>()
+    part1.mapNotNull { (refId1, pdt1) ->
+        val found2 = part2.firstOrNull { refId1 == it.first }
+        val found3 = part3.firstOrNull { refId1 == it.first }
+        if (found2 != null && found3 != null) {
+            result.add(refId1 to Triple(pdt1, found2.second, found3.second))
+        } else null
+    }
+    return result
+}
 
 fun <P, Aux, Result> apply3(
-    refs: MutableList<Ref<EntityType<*, *, *>>>,
+    refs: MutableList<Ref<EntityType<*, *, *, *, *>>>,
     pdt1: Pdt<P>,
     pdt2: Pdt<P>,
     pdt3: Pdt<Aux>,
+    idx: Int = 0,
     f: (P, P, Aux) -> Result
 ): Pdt<Result> {
-  val vars = refs.toMutableList()
   when {
     pdt1 is Leaf<P> && pdt2 is Leaf<P> && pdt3 is Leaf<Aux> ->
         return Leaf(f(pdt1.value, pdt2.value, pdt3.value))
@@ -218,28 +282,29 @@ fun <P, Aux, Result> apply3(
         return Node(
             pdt1.variable,
             pdt1.partition.mapValues { (_, tree) ->
-              apply1(vars, tree, partial3BC(f, pdt2.value, pdt3.value))
+              apply1(refs, tree, partial3BC(f, pdt2.value, pdt3.value))
             })
     pdt1 is Leaf<P> && pdt2 is Node<P> && pdt3 is Leaf<Aux> ->
         return Node(
             pdt2.variable,
             pdt2.partition.mapValues { (_, tree) ->
-              apply1(vars, tree, partial3AC(f, pdt1.value, pdt3.value))
+              apply1(refs, tree, partial3AC(f, pdt1.value, pdt3.value))
             })
     pdt1 is Leaf<P> && pdt2 is Leaf<P> && pdt3 is Node<Aux> ->
         return Node(
             pdt3.variable,
             pdt3.partition.mapValues {
-              apply1(vars, it.value, partial3AB(f, pdt1.value, pdt2.value))
+              apply1(refs, it.value, partial3AB(f, pdt1.value, pdt2.value))
             })
-    vars.isNotEmpty() && pdt1 is Node<P> && pdt2 is Node<P> && pdt3 is Leaf<Aux> ->
-        return compareVariables(vars, pdt1, pdt2, partial3C(f, pdt3.value))
-    vars.isNotEmpty() && pdt1 is Node<P> && pdt2 is Leaf<P> && pdt3 is Node<Aux> ->
-        return compareVariables(vars, pdt1, pdt3, partial3B(f, pdt2.value))
-    vars.isNotEmpty() && pdt1 is Leaf<P> && pdt2 is Node<P> && pdt3 is Node<Aux> ->
-        return compareVariables(vars, pdt2, pdt3, partial3A(f, pdt1.value))
-    vars.isNotEmpty() && pdt1 is Node<P> && pdt2 is Node<P> && pdt3 is Node<Aux> -> {
-      val variable = vars.removeFirst()
+      refs.isNotEmpty() && pdt1 is Node<P> && pdt2 is Node<P> && pdt3 is Leaf<Aux> ->
+        return compareVariables(refs, pdt1, pdt2, idx, partial3C(f, pdt3.value))
+      refs.isNotEmpty() && pdt1 is Node<P> && pdt2 is Leaf<P> && pdt3 is Node<Aux> ->
+        return compareVariables(refs, pdt1, pdt3, idx, partial3B(f, pdt2.value))
+      refs.isNotEmpty() && pdt1 is Leaf<P> && pdt2 is Node<P> && pdt3 is Node<Aux> ->
+        return compareVariables(refs, pdt2, pdt3, idx, partial3A(f, pdt1.value))
+      refs.isNotEmpty() && pdt1 is Node<P> && pdt2 is Node<P> && pdt3 is Node<Aux> -> {
+      val variable = refs[idx]
+      val i = idx+1
       val equalTriple =
           (pdt1.variable == variable) to (pdt2.variable == variable) to (pdt3.variable == variable)
       return when (equalTriple) {
@@ -247,39 +312,39 @@ fun <P, Aux, Result> apply3(
             Node(
                 variable,
                 merge3(pdt1.partition, pdt2.partition, pdt3.partition).mapValues { (_, trees) ->
-                  apply3(vars, trees.first, trees.second, trees.third, f)
+                  apply3(refs, trees.first, trees.second, trees.third, i, f)
                 })
         (true to true) to false ->
             Node(
                 variable,
                 merge2(pdt1.partition, pdt2.partition).mapValues { (_, trees) ->
-                  apply3(vars, trees.first, trees.second, pdt3, f)
+                  apply3(refs, trees.first, trees.second, pdt3, i, f)
                 })
         (true to false) to true ->
             Node(
                 variable,
                 merge2(pdt1.partition, pdt3.partition).mapValues { (_, trees) ->
-                  apply3(vars, trees.first, pdt2, trees.second, f)
+                  apply3(refs, trees.first, pdt2, trees.second, i, f)
                 })
         (false to true) to true ->
             Node(
                 variable,
                 merge2(pdt2.partition, pdt3.partition).mapValues { (_, trees) ->
-                  apply3(vars, pdt1, trees.first, trees.second, f)
+                  apply3(refs, pdt1, trees.first, trees.second, i, f)
                 })
         (false to false) to true ->
             Node(
                 variable,
-                pdt3.partition.mapValues { (refId3, tree3) -> apply3(vars, pdt1, pdt2, tree3, f) })
+                pdt3.partition.mapValues { (refId3, tree3) -> apply3(refs, pdt1, pdt2, tree3, i, f) })
         (false to true) to false ->
             Node(
                 variable,
-                pdt2.partition.mapValues { (refId2, tree2) -> apply3(vars, pdt1, tree2, pdt3, f) })
+                pdt2.partition.mapValues { (refId2, tree2) -> apply3(refs, pdt1, tree2, pdt3, i, f) })
         (true to false) to false ->
             Node(
                 variable,
-                pdt1.partition.mapValues { (refId1, tree1) -> apply3(vars, tree1, pdt2, pdt3, f) })
-        else -> apply3(vars, pdt1, pdt2, pdt3, f)
+                pdt1.partition.mapValues { (refId1, tree1) -> apply3(refs, tree1, pdt2, pdt3, i, f) })
+        else -> apply3(refs, pdt1, pdt2, pdt3, i, f)
       }
     }
     else -> throw EmptyVariableReferences()
@@ -287,21 +352,21 @@ fun <P, Aux, Result> apply3(
 }
 
 fun hide(
-    refs: MutableList<Ref<EntityType<*, *, *>>>,
+    refs: MutableList<Ref<EntityType<*, *, *, *, *>>>,
     pdt: Pdt<Proof>,
-    fleaf: (Ref<EntityType<*, *, *>>, Proof) -> Proof,
-    fnode: (Ref<EntityType<*, *, *>>, List<Pair<RefId, Proof>>) -> Proof,
-    newVar: Ref<EntityType<*, *, *>>
+    fleaf: (Ref<EntityType<*, *, *, *, *>>, Proof) -> Proof,
+    fnode: (Ref<EntityType<*, *, *, *, *>>, Map<RefId, Proof>) -> Proof,
+    newVar: Ref<EntityType<*, *, *, *, *>>
 ): Pdt<Proof> {
   return hideRec(refs.toMutableList(), pdt, fleaf, fnode, newVar)
 }
 
 private fun hideRec(
-    vars: MutableList<Ref<EntityType<*, *, *>>>,
+    vars: MutableList<Ref<EntityType<*, *, *, *, *>>>,
     pdt: Pdt<Proof>,
-    fleaf: (Ref<EntityType<*, *, *>>, Proof) -> Proof,
-    fnode: (Ref<EntityType<*, *, *>>, List<Pair<RefId, Proof>>) -> Proof,
-    newVar: Ref<EntityType<*, *, *>>
+    fleaf: (Ref<EntityType<*, *, *, *, *>>, Proof) -> Proof,
+    fnode: (Ref<EntityType<*, *, *, *, *>>, Map<RefId, Proof>) -> Proof,
+    newVar: Ref<EntityType<*, *, *, *, *>>
 ): Pdt<Proof> {
   when {
     pdt is Leaf -> return Leaf(fleaf(newVar, pdt.value))
@@ -311,21 +376,38 @@ private fun hideRec(
           fnode(
               newVar,
               pdt.partition.mapNotNull { (refId, leaf) ->
-                if (leaf is Leaf<Proof>) {
-                  refId to leaf.value
-                } else null
-              }))
+                  if (leaf is Leaf<Proof>) refId to leaf.value else null
+              }.toMap()
+          ))
     }
     vars.isNotEmpty() && pdt is Node<Proof> -> {
       val first = vars.removeFirst()
       return if (first == pdt.variable) {
         Node(
             first,
-            pdt.partition.mapValues { (refId, tree) -> hide(vars, tree, fleaf, fnode, newVar) })
+            pdt.partition.mapValues { (_, tree) -> hide(vars, tree, fleaf, fnode, newVar) })
       } else {
         hide(vars, pdt, fleaf, fnode, newVar)
       }
     }
+      vars.size == 1 && pdt is NodeL<Proof> -> {
+          vars.removeFirst()
+          return Leaf(fnode(newVar, pdt.partition.mapNotNull { (refId, leaf) ->
+              if (leaf is Leaf<Proof>) {
+                  refId to leaf.value
+              } else null
+          }.toMap()))
+      }
+      vars.isNotEmpty() && pdt is NodeL<Proof> -> {
+          val first = vars.removeFirst()
+          return if (first == pdt.variable) {
+              NodeL(first, pdt.partition.map { (refId, tree) ->
+                  refId to hide(vars, tree, fleaf, fnode, newVar)
+              })
+          } else {
+              hide(vars, pdt, fleaf, fnode, newVar)
+          }
+      }
     else -> throw EmptyVariableReferences()
   }
 }

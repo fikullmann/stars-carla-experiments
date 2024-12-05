@@ -17,33 +17,38 @@
 
 package tools.aqua.auxStructures
 
-import kotlin.math.max
 import tools.aqua.stars.carla.experiments.komfymc.*
+import tools.aqua.stars.carla.experiments.komfymc.auxStructures.TAux
+import tools.aqua.stars.core.types.TickDifference
+import tools.aqua.stars.core.types.TickUnit
 
-class Haux(
-    private var tsZero: TS? = null,
-    val sAlphasIn: MutableList<Pair<TS, SatProof>> = mutableListOf(),
-    val sAlphasOut: MutableList<Pair<TS, SatProof>> = mutableListOf(),
-    val vAlphasIn: MutableList<Pair<TS, ViolationProof>> = mutableListOf(),
-    val vAlphasOut: MutableList<Pair<TS, ViolationProof>> = mutableListOf()
-) : TAux() {
+class Haux<U : TickUnit<U, D>, D : TickDifference<D>>(
+    private var tsZero: TS<U, D>? = null,
+    val sAlphasIn: MutableList<Pair<TS<U, D>, SatProof>> = mutableListOf(),
+    val sAlphasOut: MutableList<Pair<TS<U, D>, SatProof>> = mutableListOf(),
+    val vAlphasIn: MutableList<Pair<TS<U, D>, ViolationProof>> = mutableListOf(),
+    val vAlphasOut: MutableList<Pair<TS<U, D>, ViolationProof>> = mutableListOf()
+) : TAux<U, D>() {
 
-  fun updateHaux(interval: Interval, ts: TS, tp: TP, p: Proof): Proof {
+  fun updateHaux(interval: RelativeInterval<D>, ts: TS<U, D>, tp: TP, p: Proof): Proof {
     val currTsZero = tsZero ?: ts
     tsZero = currTsZero
     addSubps(ts, p)
-    if (ts.i < (currTsZero.i + interval.startVal)) {
+    if (ts < currTsZero + interval.startVal) {
       tsTpOut[tp] = ts
       return SatHistoricallyOutL(tp)
     } else {
-      val l = if (interval is BoundedInterval) max(0.0, (ts.i - interval.endVal)) else currTsZero.i
-      val r = ts.i - interval.startVal
-      shiftHaux(BoundedInterval(l, r), interval.startVal, ts, tp)
+      var l = currTsZero
+      if (interval.endVal != null && currTsZero < (ts - interval.endVal)) {
+        l = (ts - interval.endVal)
+      }
+      val r = ts - interval.startVal
+      shiftHaux(RealInterval(l, r), interval.startVal, ts, tp)
       return evalHaux(tp)
     }
   }
 
-  private fun addSubps(ts: TS, p: Proof) {
+  private fun addSubps(ts: TS<U, D>, p: Proof) {
     when (p) {
       is SatProof -> sAlphasOut.add(ts to p)
       is ViolationProof -> vAlphasOut.add(ts to p)
@@ -51,24 +56,24 @@ class Haux(
     }
   }
 
-  private fun shiftHaux(interval: BoundedInterval, iStart: Double, ts: TS, tp: TP) {
+  private fun shiftHaux(interval: RealInterval<U, D>, iStart: D?, ts: TS<U, D>, tp: TP) {
     shiftTsTpsPast(interval, iStart, ts, tp)
 
-    val newInSat = sAlphasOut.filter { (ts, _) -> interval.contains(ts.i) }
-    sAlphasOut.removeIf { (ts, _) -> ts.i <= interval.endVal }
+    val newInSat = sAlphasOut.filter { (ts, _) -> interval.contains(ts) }
+    sAlphasOut.removeIf { (ts, _) -> ts <= interval.endVal }
     sAlphasIn.addAll(newInSat)
 
-    val newInVio = vAlphasOut.filter { (ts, _) -> interval.contains(ts.i) }
-    vAlphasOut.removeIf { (ts, _) -> ts.i <= interval.endVal }
+    val newInVio = vAlphasOut.filter { (ts, _) -> interval.contains(ts) }
+    vAlphasOut.removeIf { (ts, _) -> ts <= interval.endVal }
     if (newInVio.isNotEmpty()) {
       vAlphasIn.addAll(newInVio)
       vAlphasIn.sortBy { it.second.size() }
     }
 
-    sAlphasIn.removeIf { (tsL, _) -> tsL.i < interval.startVal }
-    sAlphasOut.removeIf { (tsL, _) -> tsL.i <= interval.endVal }
-    vAlphasIn.removeIf { (tsL, _) -> tsL.i < interval.startVal }
-    vAlphasOut.removeIf { (tsL, _) -> tsL.i <= interval.endVal }
+    sAlphasIn.removeIf { (tsL, _) -> tsL < interval.startVal }
+    sAlphasOut.removeIf { (tsL, _) -> tsL <= interval.endVal }
+    vAlphasIn.removeIf { (tsL, _) -> tsL < interval.startVal }
+    vAlphasOut.removeIf { (tsL, _) -> tsL <= interval.endVal }
   }
 
   private fun evalHaux(tp: TP): Proof {
@@ -86,7 +91,7 @@ class Haux(
 
   fun copy() =
       Haux(
-              tsZero,
+              tsZero ?: null,
               sAlphasIn.map { it.copy() }.toMutableList(),
               sAlphasOut.map { it.copy() }.toMutableList(),
               vAlphasIn.map { it.copy() }.toMutableList(),
@@ -97,7 +102,12 @@ class Haux(
             it.tsTpIn = tsTpIn.toMutableMap()
           }
 
-  fun update1(interval: Interval, nts: TS, ntp: TP, p1: Proof): Pair<Proof, Haux> {
+  fun update1(
+      interval: RelativeInterval<D>,
+      nts: TS<U, D>,
+      ntp: TP,
+      p1: Proof
+  ): Pair<Proof, Haux<U, D>> {
     val copy = copy()
     val result = copy.updateHaux(interval, nts, ntp, p1)
     return result to copy

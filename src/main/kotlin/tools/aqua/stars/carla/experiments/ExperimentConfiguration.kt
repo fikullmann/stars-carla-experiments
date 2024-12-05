@@ -148,7 +148,8 @@ class ExperimentConfiguration : CliktCommand() {
           }
     }
 
-    val tsc = tsc()
+    //val tsc = tsc()
+    val tsc = dslTsc()
 
     println("Projections:")
     tsc.buildProjections(projectionIgnoreList.map { it.trim() }).forEach {
@@ -161,7 +162,7 @@ class ExperimentConfiguration : CliktCommand() {
     println("-----------------")
 
     println("Loading simulation runs...")
-    val simulationRunsWrappers = getSimulationRuns()
+    val simulationRunsWrappers = listOf(getSimulationRuns().first())
 
     println("Loading segments...")
     val segments =
@@ -179,7 +180,7 @@ class ExperimentConfiguration : CliktCommand() {
     println("Creating TSC...")
     val evaluation =
         TSCEvaluation(
-                tscList = tsc().buildProjections(projectionIgnoreList = projectionIgnoreList),
+                tscList = dslTsc().buildProjections(projectionIgnoreList = projectionIgnoreList),
                 writePlots = writePlots,
                 writePlotDataCSV = writePlotDataCSV,
                 writeSerializedResults = writeSerializedResults,
@@ -265,6 +266,7 @@ class ExperimentConfiguration : CliktCommand() {
                 }
                 if (mapFile.nameWithoutExtension.contains("dynamic_data") &&
                     dynamicFilter.toRegex().containsMatchIn(mapFile.name)) {
+                  dynamicFiles.clear() // delete
                   dynamicFiles.add(mapFile.toPath())
                 }
               }

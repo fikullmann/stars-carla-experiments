@@ -21,7 +21,7 @@ package tools.aqua.stars.carla.experiments.komfymc.dsl
 
 import tools.aqua.stars.core.types.*
 
-class Bind<E1 : EntityType<*, *, *>, T : Any>(
+class Bind<E1 : EntityType<*, *, *, *, *>, T : Any>(
     val ref: Ref<E1>,
     private val term: (E1) -> T,
     val binding: MutableMap<RefId, T> = mutableMapOf(),

@@ -17,9 +17,11 @@
 
 package tools.aqua.auxStructures
 
-import kotlin.math.max
 import tools.aqua.*
 import tools.aqua.stars.carla.experiments.komfymc.*
+import tools.aqua.stars.carla.experiments.komfymc.auxStructures.TAux
+import tools.aqua.stars.core.types.TickDifference
+import tools.aqua.stars.core.types.TickUnit
 
 /**
  * @param tsZero starting timestamp (needed for when the interval denotes not existing timestamps)
@@ -34,29 +36,32 @@ import tools.aqua.stars.carla.experiments.komfymc.*
  * @param vAlphasBetasOut stores all violations of alpha and beta outside the interval (are shifted
  *   into other violation proofs as needed)
  */
-class Saux(
-    private var tsZero: TS? = null,
-    private var sBetaAlphasIn: MutableList<Pair<TS, SatSince>> = mutableListOf(),
-    private var sBetaAlphasOut: MutableList<Pair<TS, SatSince>> = mutableListOf(),
-    private var vAlphaBetasIn: MutableList<Pair<TS, VSince>> = mutableListOf(),
-    private var vAlphasOut: MutableList<Pair<TS, ViolationProof>> = mutableListOf(),
-    private var vBetasIn: MutableList<Pair<TS, ViolationProof>> = mutableListOf(),
-    private var vAlphasBetasOut: MutableList<Triple<TS, ViolationProof?, ViolationProof?>> =
+class Saux<U : TickUnit<U, D>, D : TickDifference<D>>(
+    private var tsZero: TS<U, D>? = null,
+    private var sBetaAlphasIn: MutableList<Pair<TS<U, D>, SatSince>> = mutableListOf(),
+    private var sBetaAlphasOut: MutableList<Pair<TS<U, D>, SatSince>> = mutableListOf(),
+    private var vAlphaBetasIn: MutableList<Pair<TS<U, D>, VSince>> = mutableListOf(),
+    private var vAlphasOut: MutableList<Pair<TS<U, D>, ViolationProof>> = mutableListOf(),
+    private var vBetasIn: MutableList<Pair<TS<U, D>, ViolationProof>> = mutableListOf(),
+    private var vAlphasBetasOut: MutableList<Triple<TS<U, D>, ViolationProof?, ViolationProof?>> =
         mutableListOf(),
-) : TAux() {
+) : TAux<U, D>() {
 
   /** function to be called from outside at every new timestamp */
-  fun updateSaux(interval: Interval, ts: TS, tp: TP, p1: Proof, p2: Proof): Proof {
+  fun updateSaux(interval: RelativeInterval<D>, ts: TS<U, D>, tp: TP, p1: Proof, p2: Proof): Proof {
     val currTsZero = tsZero ?: ts
     tsZero = currTsZero
     addSubps(ts, p1, p2)
-    if (ts.i < (currTsZero.i + interval.startVal)) {
+    if (ts < currTsZero + interval.startVal) {
       tsTpOut[tp] = ts
       return VSinceOutL(tp)
     } else {
-      val l = if (interval is BoundedInterval) max(0.0, (ts.i - interval.endVal)) else currTsZero.i
-      val r = ts.i - interval.startVal
-      shiftSaux(BoundedInterval(l, r), interval.startVal, ts, tp)
+      var l = currTsZero
+      if (interval.endVal != null && currTsZero < (ts - interval.endVal)) {
+        l = (ts - interval.endVal)
+      }
+      val r = interval.startVal?.let { ts - it } ?: ts
+      shiftSaux(RealInterval(l, r), interval.startVal, ts, tp)
       return evalSaux(tp)
     }
   }
@@ -86,10 +91,9 @@ class Saux(
    * update sBetaAlphasIn, sBetaAlphasOut, vAlphasOut, vAlphasBetasOut according to proof at current
    * TS/TP
    */
-  private fun addSubps(ts: TS, p1: Proof, p2: Proof) {
+  private fun addSubps(ts: TS<U, D>, p1: Proof, p2: Proof) {
     when {
       p1 is SatProof && p2 is SatProof -> {
-        // TODO als ForEach
         sBetaAlphasIn.forEachIndexed { i, _ -> sBetaAlphasIn[i].second.alphas.add(p1) }
         sBetaAlphasOut.forEachIndexed { i, _ -> sBetaAlphasOut[i].second.alphas.add(p1) }
 
@@ -130,20 +134,20 @@ class Saux(
    * shifts the interval and the proofs around in the different proof lists according to the current
    * TS/TP
    */
-  private fun shiftSaux(interval: BoundedInterval, iStart: Double, nts: TS, ntp: TP) {
+  private fun shiftSaux(interval: RealInterval<U, D>, iStart: D?, nts: TS<U, D>, ntp: TP) {
     shiftTsTpsPast(interval, iStart, nts, ntp)
 
     // updates sBetaAlphasOut and sBetaAlphasIn
-    val shiftToIn = sBetaAlphasOut.filter { (ts, _) -> interval.contains(ts.i) }
+    val shiftToIn = sBetaAlphasOut.filter { (ts, _) -> interval.contains(ts) }
     if (shiftToIn.isNotEmpty()) {
       sBetaAlphasIn.addAll(shiftToIn)
       sBetaAlphasIn.sortBy { it.second.size() }
     }
-    sBetaAlphasOut.removeIf { (ts, _) -> ts.i <= interval.endVal }
+    sBetaAlphasOut.removeIf { (ts, _) -> ts <= interval.endVal }
 
     // updates vBetasIn and vAlphaBetasIn
-    val newVioIn = vAlphasBetasOut.filter { (ts, _, _) -> interval.contains(ts.i) }
-    vAlphasBetasOut.removeIf { (ts, _) -> ts.i <= interval.endVal }
+    val newVioIn = vAlphasBetasOut.filter { (ts, _, _) -> interval.contains(ts) }
+    vAlphasBetasOut.removeIf { (ts, _) -> ts <= interval.endVal }
 
     newVioIn.forEach { (ts, _, vp2) ->
       when (vp2) {
@@ -168,10 +172,10 @@ class Saux(
     vAlphaBetasIn.forEachIndexed { i, _ -> vAlphaBetasIn[i].second.tp = ntp }
 
     // remove_from_msaux
-    sBetaAlphasIn.removeIf { (tsL, _) -> tsL.i < interval.startVal }
-    vAlphaBetasIn.removeIf { (tsL, _) -> tsL.i < interval.startVal }
-    vAlphasOut.removeIf { (tsL, _) -> tsL.i <= interval.endVal }
-    vBetasIn.removeIf { (tsL, _) -> tsL.i < interval.startVal }
+    sBetaAlphasIn.removeIf { (tsL, _) -> tsL < interval.startVal }
+    vAlphaBetasIn.removeIf { (tsL, _) -> tsL < interval.startVal }
+    vAlphasOut.removeIf { (tsL, _) -> tsL <= interval.endVal }
+    vBetasIn.removeIf { (tsL, _) -> tsL < interval.startVal }
   }
 
   fun copy() =
@@ -188,7 +192,13 @@ class Saux(
             it.tsTpIn = tsTpIn.toMutableMap()
           }
 
-  fun update1(interval: Interval, nts: TS, ntp: TP, p1: Proof, p2: Proof): Pair<Proof, Saux> {
+  fun update1(
+      interval: RelativeInterval<D>,
+      nts: TS<U, D>,
+      ntp: TP,
+      p1: Proof,
+      p2: Proof
+  ): Pair<Proof, Saux<U, D>> {
     val copy = copy()
     val result = copy.updateSaux(interval, nts, ntp, p1, p2)
     return result to copy

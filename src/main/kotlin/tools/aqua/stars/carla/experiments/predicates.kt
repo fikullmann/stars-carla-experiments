@@ -50,7 +50,7 @@ val hasHighTrafficDensity =
 val changedLane =
     predicate(Vehicle::class) { _, v ->
       eventually(v) { v0 ->
-        eventually(v0) { v1 -> v0.lane.road == v1.lane.road && v0.lane != v1.lane }
+          eventually(v0) { v1 -> v0.lane.road == v1.lane.road && v0.lane != v1.lane }
       }
     }
 
